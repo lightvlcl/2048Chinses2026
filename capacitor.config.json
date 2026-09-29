@@ -1,0 +1,8 @@
+{
+  "appId": "com.yourname.game2048",
+  "appName": "2048新中版",
+  "webDir": "www",
+  "ios": {
+    "backgroundColor": "#191932"
+  }
+}

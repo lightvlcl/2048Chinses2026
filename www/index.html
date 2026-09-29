@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#191932" />
+  <title>2048新中版 · 水墨数字消除</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="bg"></div>
+  <div id="app">
+    <header>
+      <div class="title-wrap">
+        <h1>2048</h1>
+        <p class="subtitle">新中版 · 滑动合并 · 达成 2048</p>
+      </div>
+      <div class="scores">
+        <div class="score-box" id="score-box">
+          <span class="label">分数</span>
+          <span class="val" id="score">0</span>
+        </div>
+        <div class="score-box">
+          <span class="label">最佳</span>
+          <span class="val" id="best">0</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="controls">
+      <button id="new-game" type="button">🔄 新游戏</button>
+      <button id="undo" type="button" disabled>↩️ 撤销</button>
+      <button id="bg-btn" type="button">🏞️ 桂林</button>
+    </div>
+
+    <div class="board" id="board">
+      <div class="cells" id="cells"></div>
+      <div class="tiles" id="tiles"></div>
+      <div class="overlay hidden" id="overlay">
+        <div class="overlay-card">
+          <h2 id="overlay-title"></h2>
+          <p id="overlay-text"></p>
+          <button id="overlay-btn" type="button"></button>
+          <button id="overlay-btn2" type="button" class="secondary hidden"></button>
+        </div>
+      </div>
+    </div>
+
+    <p class="hint">💡 手机上手指滑动，电脑上方向键 / WASD。<br />相同数字碰撞即可合并，合成 2048 获胜！</p>
+  </div>
+  <script src="js/ads.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
