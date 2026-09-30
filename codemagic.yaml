@@ -73,40 +73,19 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並設定手動簽署與綁定描述檔 UUID
+          # 7. 進入 iOS 專案目錄並設定 Development Team（改用自動簽署匹配）
           cd ios/App
-          echo "=== 正在設定手動簽署與描述檔綁定 ==="
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' App.xcodeproj/project.pbxproj
+          echo "=== 正在設定 Development Team ==="
           sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
 
-          # 利用 Python 將 PROVISIONING_PROFILE 注入專案設定中（僅影響 App 目標，移除容易衝突的 Specifier）
-          python3 -c '
-          import sys
-          proj_path = "App.xcodeproj/project.pbxproj"
-          with open(proj_path, "r") as f:
-              lines = f.readlines()
-
-          new_lines = []
-          for line in lines:
-              new_lines.append(line)
-              if "CODE_SIGN_STYLE = Manual;" in line:
-                  indent = line[:line.index("CODE_SIGN_STYLE")]
-                  new_lines.append(f"{indent}PROVISIONING_PROFILE = \"'$PROVISIONING_PROFILE_UUID'\";\n")
-
-          with open(proj_path, "w") as f:
-              f.writelines(new_lines)
-          print("✅ 成功將描述檔 UUID 注入 App 專案設定")
-          '
-
-          # 8. 執行 Archive 打包
+          # 8. 執行 Archive 打包（使用 Automatic 簽署）
           echo "=== 開始進行 Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
-                     CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
+                     CODE_SIGN_STYLE="Automatic" \
                      archive -archivePath build/App.xcarchive
 
           # 9. 建立合法的 exportOptions.plist
@@ -116,11 +95,7 @@ workflows:
           data = {
               "method": "ad-hoc",
               "teamID": "58RATT4ABA",
-              "signingStyle": "manual",
-              "signingCertificate": "Apple Distribution",
-              "provisioningProfiles": {
-                  "com.lightvlcl.2048Chinses2026": "'$PROVISIONING_PROFILE_UUID'"
-              }
+              "signingStyle": "automatic"
           }
           with open("exportOptions.plist", "wb") as f:
               plistlib.dump(data, f)
