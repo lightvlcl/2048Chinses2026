@@ -8,6 +8,9 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         TEAM_ID: "58RATT4ABA"
         APP_NAME: "App"
+      # 如果你在 Codemagic 環境變數中設定了 App Store Connect API，可以透過以下方式引用（選填，若沒設可先忽略）
+      # groups:
+      #   - appstore_credentials
     scripts:
       - name: Install dependencies and sync Capacitor
         script: |
@@ -21,24 +24,29 @@ workflows:
           
           npx cap sync ios
 
-      - name: Build and Export IPA with Manual Signing
+      - name: Initialize Code Signing & Build IPA
         script: |
           set -e
           mkdir -p build_output
 
-          # 錯誤攔截器與診斷
+          # 智慧診斷攔截器
           trap '
             echo "========================================="
-            echo "🔍 [即時智慧診斷報告 - 手動簽署發生錯誤]"
+            echo "🔍 [即時智慧診斷報告 - 建置與簽署失敗]"
             echo "========================================="
-            echo "【當前檢查】"
-            echo "Team ID: 58RATT4ABA"
-            echo "Bundle ID: com.lightvlcl.2048Chinses2026"
-            echo "請確認 Codemagic 憑證管理中是否有上傳相對應的 App Store Distribution 憑證 (.p12)。"
+            echo "【金鑰環內可用憑證清單】"
+            security find-identity -v -p codesigning || true
+            echo ""
+            echo "【系統中的描述檔】"
+            ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || echo "無描述檔"
             echo "========================================="
           ' ERR
 
-          # 使用手動模式 (Manual Signing) 進行 Archive
+          # 初始化 Codemagic 憑證工具（如果已在後台設定憑證/API）
+          # 如果你有在 Codemagic UI 設定 Code Signing，這行指令會自動把憑證和描述檔安裝到雲端 Mac 裡
+          app-store-connect fetch-signing-files --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" --bundle-id "$BUNDLE_ID" --type APP_STORE || true
+
+          # 執行帶有手動簽署的 Xcode Build
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
