@@ -51,7 +51,7 @@ workflows:
           export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          # 3. 修正參數：使用正確的 IOS_APP_STORE 類型自動下載並安裝簽署檔案
+          # 3. 自動下載並安裝簽署檔案與描述檔（含 --create 以防雲端尚未建立）
           app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
 
           echo "✅ 憑證與描述檔自動抓取完成！"
