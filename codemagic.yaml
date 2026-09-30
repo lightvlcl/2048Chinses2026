@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 純原生指令打包版 —— iOS 專用
+# Codemagic 純原生指令打包版 —— iOS 專用 (修正指令版)
 # ============================================================
 workflows:
   ios-release:
@@ -32,7 +32,7 @@ workflows:
           fi
       - name: Set up code signing
         script: |
-          app-store-connect fetch-signing-profiles \
+          app-store-connect fetch-signing-files \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
