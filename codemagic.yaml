@@ -26,12 +26,12 @@ workflows:
           npx cap sync ios
           echo "✅ 依賴安裝完成"
 
-      - name: Set up code signing via App Store Connect API
+      - name: Set up code signing via App Store Connect API (Diagnostic Mode)
         script: |
           set -e
           mkdir -p build_output
 
-          echo "=== [1/4] 初始化鑰匙圈 ==="
+          echo "=== [診斷 1/4] 初始化鑰匙圈 ==="
           keychain initialize
 
           # 1. 安全寫入 .p8 私鑰檔案
@@ -51,18 +51,28 @@ workflows:
           export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          echo "=== [2/4] 自動建立並下載全新憑證與描述檔 ==="
+          echo "=== [診斷 2/4] 檢查 API 連線與憑證環境 ==="
+          echo "目前使用的 Key ID: $KEY_ID"
+          echo "目標 Bundle ID: $BUNDLE_ID"
+
+          echo "=== [診斷 3/4] 嘗試建立並下載憑證 (強制開啟詳細除錯日誌) ==="
+          # 加上 --verbose 讓 app-store-connect 印出每一個 API 互動細節
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
-            --create
+            --create \
+            --verbose || {
+              echo "❌ 攔截到 app-store-connect 失敗！"
+              echo "這通常代表以下其中一種情況："
+              echo "1. 該 API Key 不是 Admin 權限，無法在 Apple 後台執行建立憑證動作。"
+              echo "2. Apple 帳號的憑證上限或憑證類型發生衝突。"
+              exit 1
+            }
 
-          echo "=== [3/4] 將新憑證與私鑰加入鑰匙圈 ==="
+          echo "=== [診斷 4/4] 將憑證加入鑰匙圈與注入描述檔 ==="
           keychain add-certificates
-
-          echo "=== [4/4] 注入描述檔到 Xcode 專案 ==="
           xcode-project use-profiles
 
-          echo "✅ 憑證與私鑰設定完成！"
+          echo "✅ 診斷與簽署設定完成！"
 
       - name: Build IPA with Xcode
         script: |
