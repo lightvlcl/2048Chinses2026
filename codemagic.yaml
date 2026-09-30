@@ -57,19 +57,22 @@ workflows:
           echo "=== 正在全面修正 Bundle ID ==="
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           
-          # 使用 sed 將專案檔內的舊 Bundle ID 整個取代掉，避免 App ID 不匹配報錯
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
           # 7. 進入 iOS 專案目錄並打包
           cd ios/App
 
-          # 8. 開始進行 Xcode Archive 打包（移除全域的簽署參數，改由 Xcode 專案自身設定抓取，避免 Pods 報錯）
+          # 8. 開始進行 Xcode Archive 打包（強制指定手動簽署、Team ID 與 描述檔 UUID）
           echo "=== 開始進行 Xcode Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
+                     CODE_SIGN_STYLE="Manual" \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
+                     PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+                     -allowProvisioningUpdates \
                      archive -archivePath build/App.xcarchive
                      
           # 9. 建立 exportOptions.plist 並匯出 .ipa 檔案
@@ -78,7 +81,8 @@ workflows:
           {
             "method": "ad-hoc",
             "teamID": "58RATT4ABA",
-            "signingStyle": "automatic",
+            "signingStyle": "manual",
+            "signingCertificate": "Apple Distribution",
             "provisioningProfiles": {
               "com.lightvlcl.2048Chinses2026": "$PROFILE_UUID"
             }
