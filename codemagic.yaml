@@ -1,4 +1,20 @@
-scripts:
+# ============================================================
+# Codemagic 完整自動化打包與 TestFlight 發布版 —— iOS 專用
+# ============================================================
+workflows:
+  ios-release:
+    name: 2048 iOS Release
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: v22
+      xcode: latest
+      groups:
+        - ios_keys
+      vars:
+        APP_STORE_CONNECT_ISSUER_ID: "0b40cc93-4f2b-435d-8ba3-e59e0221e1f0"
+        APP_STORE_CONNECT_KEY_IDENTIFIER: "ZDK96PR9X3"
+    scripts:
       - name: Install dependencies
         script: npm install
       - name: Prepare iOS project
@@ -24,11 +40,33 @@ scripts:
       - name: Build IPA
         script: |
           set -e
-          xcode-project build-ipa \
-            --workspace "ios/App/App.xcworkspace" \
-            --scheme "App" \
-            --code-sign-style Automatic
+          # 使用強制自動簽署與 Release 模式打包
+          xcodebuild -workspace "ios/App/App.xcworkspace" \
+            -scheme "App" \
+            -configuration Release \
+            -archivePath "$HOME/Library/Developer/Xcode/Archives/App.xcarchive" \
+            archive \
+            CODE_SIGN_STYLE=Automatic
+
+          # 建立輸出資料夾並匯出 IPA
+          mkdir -p "$HOME/output"
+          xcodebuild -exportArchive \
+            -archivePath "$HOME/Library/Developer/Xcode/Archives/App.xcarchive" \
+            -exportPath "$HOME/output" \
+            -exportOptionsPlist ios/ExportOptions.plist || \
+          xcodebuild -exportArchive \
+            -archivePath "$HOME/Library/Developer/Xcode/Archives/App.xcarchive" \
+            -exportPath "$HOME/output" \
+            -exportOptionsPlist <(cat <<EOF
+          {
+            "method": "app-store",
+            "signingStyle": "automatic",
+            "stripSwiftSymbols": true,
+            "teamID": "ZDK96PR9X3"
+          }
+          EOF
+          )
       - name: Publish to TestFlight
         script: |
           app-store-connect publish \
-            --path "$(find $(pwd) -name "*.ipa")"
+            --path "$(find $HOME/output -name "*.ipa")"
