@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 最終完整版 —— 原生打包與自動簽署更新
+# Codemagic 最終修正版 —— 整合官方 API 金鑰與自動簽署
 # ============================================================
 workflows:
   ios-release:
@@ -30,14 +30,21 @@ workflows:
           if [ -f "$ICON_DIR/AppIcon-512.png" ]; then
             cp resources/icon-1024.png "$ICON_DIR/AppIcon-512.png"
           fi
+      - name: Set up code signing with App Store Connect API
+        script: |
+          # 讓 Codemagic 官方工具利用 API 自動產生並設定簽署檔案
+          app-store-connect fetch-signing-files com.lightvlcl.2048Chinses2026 \
+            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --create
       - name: Build and Export IPA
         script: |
           set -e
           
-          # 1. 建立輸出資料夾
           mkdir -p build_output
           
-          # 2. 使用原生 xcodebuild 進行 Archive（自動簽署、覆蓋正確 Bundle ID 並允許更新憑證）
+          # 使用自動簽署進行 Archive
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
@@ -48,7 +55,7 @@ workflows:
             PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
             -allowProvisioningUpdates
             
-          # 3. 匯出成 .ipa 檔案
+          # 匯出 .ipa
           xcodebuild -exportArchive \
             -archivePath build_output/App.xcarchive \
             -exportPath build_output \
