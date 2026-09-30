@@ -79,7 +79,7 @@ workflows:
           sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' App.xcodeproj/project.pbxproj
           sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
 
-          # 利用 Python 將 PROVISIONING_PROFILE 注入專案設定中（僅影響 App 目標）
+          # 利用 Python 將 PROVISIONING_PROFILE 注入專案設定中（僅影響 App 目標，移除容易衝突的 Specifier）
           python3 -c '
           import sys
           proj_path = "App.xcodeproj/project.pbxproj"
@@ -92,11 +92,10 @@ workflows:
               if "CODE_SIGN_STYLE = Manual;" in line:
                   indent = line[:line.index("CODE_SIGN_STYLE")]
                   new_lines.append(f"{indent}PROVISIONING_PROFILE = \"'$PROVISIONING_PROFILE_UUID'\";\n")
-                  new_lines.append(f"{indent}PROVISIONING_PROFILE_SPECIFIER = \"2048 Distribution Profile\";\n")
 
           with open(proj_path, "w") as f:
               f.writelines(new_lines)
-          print("✅ 成功將描述檔 UUID 與名稱注入 App 專案設定")
+          print("✅ 成功將描述檔 UUID 注入 App 專案設定")
           '
 
           # 8. 執行 Archive 打包
