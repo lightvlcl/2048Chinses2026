@@ -32,11 +32,11 @@ workflows:
           echo "=== 正在安裝 npm 依賴套件 ==="
           npm install
 
-          # 3. 初始化鑰匙圈並匯入憑證（因為沒設密碼，直接不帶 --passphrase）
+          # 3. 初始化鑰匙圈並匯入憑證（帶入 Codemagic 提供的專屬密碼）
           keychain initialize
           
           echo "=== 正在匯入 p12 憑證到鑰匙圈 ==="
-          keychain add-certificates --certificate "$CERT_PATH"
+          keychain add-certificates --certificate "$CERT_PATH" --passphrase "snVWkEtR"
 
           # 4. 安裝 mobileprovision 描述檔到系統目錄
           PROFILE_UUID=$(grep -a -A 1 -E "<key>UUID</key>" "$PROFILE_PATH" | tail -n 1 | sed -e 's/<string>//g' -e 's/<\/string>//g' | tr -d '[:space:]')
