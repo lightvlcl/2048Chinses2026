@@ -1,4 +1,14 @@
-- name: Set up code signing
+workflows:
+  ios-workflow:
+    name: 2048 iOS Release Workflow
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      vars:
+        BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
+        APP_NAME: "App"
+    scripts:
+      - name: Set up code signing
         script: |
           app-store-connect initialize-signing
 
@@ -33,3 +43,9 @@
           }
           EOF
           )
+    artifacts:
+      - build_output/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
