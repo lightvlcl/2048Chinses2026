@@ -25,7 +25,7 @@ workflows:
           set -e
           mkdir -p build_output
 
-          # 改用自動簽署 (Automatic)，由 Xcode 與你的 Team ID 自動匹配發行憑證與描述檔
+          # 加上 -allowProvisioningUpdates 讓 Xcode 在雲端自動獲取描述檔
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
@@ -33,7 +33,8 @@ workflows:
             archive \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="ZDK96PR9X3" \
-            PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026"
+            PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
+            -allowProvisioningUpdates
 
           xcodebuild -exportArchive \
             -archivePath build_output/App.xcarchive \
