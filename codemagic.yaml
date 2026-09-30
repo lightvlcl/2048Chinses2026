@@ -16,16 +16,13 @@ workflows:
           npm install
           
           if [ ! -d "ios" ]; then
-            echo "ℹ️ 偵測到尚未建立 ios 資料夾，正在執行 npx cap add ios..."
             npx cap add ios
           fi
           
-          # 自動修改 Podfile 以避免編譯期的簽署權限阻擋
-          echo "ℹ️ 正在調整 Podfile 設定..."
           node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27;\n    end;\n  end;");fs.writeFileSync(p,c,"utf8");}' || true
           
           npx cap sync ios
-          echo "✅ 依賴安裝與同步完成！"
+          echo "✅ 依賴安裝完成"
 
       - name: Set up code signing and build IPA with Diagnostics
         script: |
@@ -37,13 +34,8 @@ workflows:
           
           if ! xcode-project use-profiles; then
             echo "❌ 【錯誤攔截】找不到對應的描述檔！"
-            echo "👉 改善方式：請確認 Codemagic 後台的 Code signing 頁面是否已經正確上傳 'Game2048Profile' 與憑證。"
             exit 1
           fi
-
-          echo "ℹ️ 檢查系統內建的憑證與描述檔狀態以供除錯："
-          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || true
-          security find-identity -v -p codesigning || true
 
           echo "=== [3/3] 開始執行 Xcode Archive (專案打包) ==="
           if ! xcodebuild -workspace ios/App/App.xcworkspace \
@@ -55,10 +47,9 @@ workflows:
             CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="58RATT4ABA" \
             PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
-            PROVISIONING_PROFILE_SPECIFIER="Game2048Profile" \
+            PROVISIONING_PROFILE_SPECIFIER="2048 Distribution Profile" \
             -allowProvisioningUpdates; then
             echo "❌ 【錯誤攔截】Xcode Archive 打包失敗！"
-            echo "👉 改善方式：請檢查上方的 Xcode 錯誤訊息，通常是因為 Bundle ID 不符、權限配置有誤或憑證到期。"
             exit 1
           fi
 
@@ -72,7 +63,7 @@ workflows:
             "signingStyle": "manual",
             "teamID": "58RATT4ABA",
             "provisioningProfiles": {
-              "com.lightvlcl.2048Chinses2026": "Game2048Profile"
+              "com.lightvlcl.2048Chinses2026": "2048 Distribution Profile"
             },
             "stripSwiftSymbols": true
           }
