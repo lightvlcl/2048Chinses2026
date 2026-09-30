@@ -15,29 +15,18 @@ workflows:
             unzip -o ios.zip
           fi
           
-          # 【保留有用程式碼】列出檔案以供除錯與定位
-          echo "=== 目前工作目錄下的檔案結構 ==="
-          find . -maxdepth 3 -not -path '*/.*' -not -path './node_modules*'
-          
-          # 定位憑證與描述檔
-          FOUND_CERT=$(find . -name "distribution.p12" | head -n 1)
-          FOUND_PROFILE=$(find . -name "*.mobileprovision" | head -n 1)
-          
-          if [ -n "$FOUND_CERT" ]; then
-            CERT_PATH="$FOUND_CERT"
-            echo "✅ 成功自動定位憑證路徑: $CERT_PATH"
-          else
-            CERT_PATH="ios/cert/distribution.p12"
-            echo "⚠️ 未自動找到憑證，使用預設路徑: $CERT_PATH"
+          # 修正雙重副檔名問題（如果有的話）
+          if [ -f "ios/cert/distribution.p12.p12" ]; then
+            mv ios/cert/distribution.p12.p12 ios/cert/distribution.p12
+            echo "✅ 已將憑證重新命名為標準 distribution.p12"
           fi
 
-          if [ -n "$FOUND_PROFILE" ]; then
-            PROFILE_PATH="$FOUND_PROFILE"
-            echo "✅ 成功自動定位描述檔路徑: $PROFILE_PATH"
-          else
-            PROFILE_PATH="ios/cert/profile.mobileprovision"
-            echo "⚠️ 未自動找到描述檔，使用預設路徑: $PROFILE_PATH"
-          fi
+          # 定位憑證與描述檔
+          CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
+          PROFILE_PATH=$(find . -name "*.mobileprovision" | head -n 1)
+          
+          echo "✅ 定位憑證路徑: $CERT_PATH"
+          echo "✅ 定位描述檔路徑: $PROFILE_PATH"
 
           # 2. 安裝 npm 依賴
           echo "=== 正在安裝 npm 依賴套件 ==="
@@ -49,7 +38,13 @@ workflows:
           echo "=== 正在匯入 p12 憑證到鑰匙圈 ==="
           keychain add-certificates --certificate "$CERT_PATH"
 
-          # 4. 同步 Capacitor iOS 專案
+          # 4. 安裝 mobileprovision 描述檔到系統目錄
+          PROFILE_UUID=$(grep -a -A 1 -E "<key>UUID</key>" "$PROFILE_PATH" | tail -n 1 | sed -e 's/<string>//g' -e 's/<\/string>//g' | tr -d '[:space:]')
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID.mobileprovision"
+          echo "✅ 描述檔安裝完成！UUID: $PROFILE_UUID"
+
+          # 5. 同步 Capacitor iOS 專案
           if [ ! -d "ios/App" ]; then
             echo "=== 正在自動補齊 iOS 平台專案 ==="
             npx cap add ios
@@ -57,13 +52,9 @@ workflows:
           
           npx cap sync ios
           
-          # 5. 自動修正專案 Bundle ID
+          # 6. 自動修正專案 Bundle ID
           echo "=== 正在修正 Bundle ID ==="
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
-
-          # 6. 使用 Codemagic 專用工具自動設定簽署（解決 Pods 衝突與手動簽署問題）
-          echo "=== 正在配置 Xcode 專案自動簽署對應 ==="
-          xcode-project use-profiles --project ios/App/App.xcodeproj
 
           # 7. 進入 iOS 專案目錄並打包
           cd ios/App
@@ -73,9 +64,27 @@ workflows:
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
+                     CODE_SIGN_STYLE=Manual \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
+                     DEVELOPMENT_TEAM="58RATT4ABA" \
+                     PROVISIONING_PROFILE="$PROFILE_UUID" \
+                     PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
                      archive -archivePath build/App.xcarchive
                      
-          # 8. 匯出 .ipa 檔案
+          # 8. 建立 exportOptions.plist 並匯出 .ipa 檔案
+          echo "=== 正在建立 exportOptions.plist ==="
+          cat <<EOF > exportOptions.plist
+          {
+            "method": "ad-hoc",
+            "teamID": "58RATT4ABA",
+            "signingStyle": "manual",
+            "signingCertificate": "Apple Distribution",
+            "provisioningProfiles": {
+              "com.lightvlcl.2048Chinses2026": "$PROFILE_UUID"
+            }
+          }
+          EOF
+
           echo "=== 正在匯出 .ipa 檔案 ==="
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
