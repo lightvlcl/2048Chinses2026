@@ -15,16 +15,19 @@ workflows:
             npx cap add ios
           fi
           
-          # 用 Node.js 安全地將 Pods 簽署關閉設定插入原本的 Podfile，避免重複宣告
+          # 用乾淨的 Node.js 寫法直接插入真實換行，不留跳脫字元
           node -e '
             const fs = require("fs");
             let p = "ios/App/Podfile";
             let content = fs.readFileSync(p, "utf8");
             if (!content.includes("CODE_SIGNING_ALLOWED")) {
-              content = content.replace(
-                "post_install do |installer|",
-                "post_install do |installer|\\n  installer.pods_project.targets.each do |target|\\n    target.build_configurations.each do |config|\\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27\\n    end\\n  end"
-              );
+              const snippet = `post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27
+    end
+  end`;
+              content = content.replace("post_install do |installer|", snippet);
               fs.writeFileSync(p, content, "utf8");
               console.log("Successfully injected signing bypass into Podfile");
             }
