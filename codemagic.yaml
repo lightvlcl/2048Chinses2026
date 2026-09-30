@@ -31,10 +31,10 @@ workflows:
           set -e
           mkdir -p build_output
 
-          echo "=== [2/4] 初始化鑰匙圈與自動抓取/建立憑證與描述檔 ==="
+          echo "=== [2/4] 初始化鑰匙圈與自動產生憑證/描述檔 ==="
           keychain initialize
 
-          # 1. 安全寫入 .p8 私鑰檔案
+          # 1. 安全寫入 App Store Connect API 的 .p8 私鑰檔案
           PRIVATE_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
           mkdir -p "$(dirname "$PRIVATE_KEY_PATH")"
           cat << 'EOF' > "$PRIVATE_KEY_PATH"
@@ -51,8 +51,14 @@ workflows:
           export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          # 3. 自動抓取，如果沒有憑證或描述檔則自動在雲端建立 (--create 會同時建立憑證與描述檔)
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          # 3. 動態產生一組用於建立憑證的 RSA 私鑰
+          openssl genrsa -out cert_private_key.pem 2048
+
+          # 4. 自動建立憑證與描述檔（帶入 --create 與 --certificate-key 解決私鑰缺失問題）
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create \
+            --certificate-key "$(cat cert_private_key.pem)"
 
           echo "✅ 憑證與描述檔自動建立與抓取完成！"
 
