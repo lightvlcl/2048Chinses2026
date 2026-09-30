@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 最終精簡版 —— 移除冗餘憑證指令，直接原生打包
+# Codemagic 最終完整版 —— 原生打包與自動簽署更新
 # ============================================================
 workflows:
   ios-release:
@@ -37,14 +37,16 @@ workflows:
           # 1. 建立輸出資料夾
           mkdir -p build_output
           
-          # 2. 使用原生 xcodebuild 進行 Archive（自動管理簽署）
+          # 2. 使用原生 xcodebuild 進行 Archive（自動簽署、覆蓋正確 Bundle ID 並允許更新憑證）
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
             -archivePath build_output/App.xcarchive \
             archive \
             CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="ZDK96PR9X3"
+            DEVELOPMENT_TEAM="ZDK96PR9X3" \
+            PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
+            -allowProvisioningUpdates
             
           # 3. 匯出成 .ipa 檔案
           xcodebuild -exportArchive \
@@ -55,7 +57,8 @@ workflows:
             "method": "app-store",
             "signingStyle": "automatic",
             "stripSwiftSymbols": true,
-            "teamID": "ZDK96PR9X3"
+            "teamID": "ZDK96PR9X3",
+            "bundleIdentifier": "com.lightvlcl.2048Chinses2026"
           }
           EOF
           )
