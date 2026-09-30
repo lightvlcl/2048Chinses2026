@@ -1,6 +1,5 @@
 # ============================================================
 # Codemagic 云构建配置 —— iOS 签名打包 + 上传 App Store Connect
-# 全程无需 Mac，在 codemagic.io 网页端即可完成构建
 # ============================================================
 workflows:
   ios-release:
@@ -8,13 +7,11 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
-      # 如镜像不支持该版本号，可改为 latest 或删除此行使用默认版本
       node: v22
       xcode: latest
       ios_signing:
         distribution_type: app_store
-        # ⚠️ 必须与 capacitor.config.json 的 appId 保持一致，且全 App Store 唯一
-        bundle_identifier: com.yourname.game2048
+        bundle_identifier: com.lightvlcl.game2048
     scripts:
       - name: Install dependencies
         script: npm install
@@ -41,48 +38,6 @@ workflows:
             --scheme "App"
     publishing:
       app_store_connect:
-        # 需要先在 Codemagic 后台连接 App Store Connect API 集成（见 README 步骤 3）
         auth: integration
         submit_to_testflight: true
-        # 首次上架建议先传 TestFlight 验证，再到 App Store Connect 手动提交审核
         submit_to_app_store: false
-
-  # ============================================================
-  # Google Play 云构建 —— 产出签名 AAB 并上传内部测试轨道
-  # 需在 Codemagic 配置变量组 android_credentials（见 README）
-  # ============================================================
-  android-release:
-    name: 2048 Android Release
-    instance_type: linux
-    max_build_duration: 60
-    environment:
-      node: v22
-      java_version: 21
-      groups:
-        - android_credentials
-    scripts:
-      - name: Install dependencies
-        script: npm install
-      - name: Prepare Android project
-        script: |
-          if [ ! -d android ]; then npx cap add android; fi
-          npx cap sync android
-      - name: Set up keystore
-        script: |
-          echo "$CM_KEYSTORE" | base64 --decode > "$CM_BUILD_DIR/android/app/upload-keystore.jks"
-          cat > "$CM_BUILD_DIR/android/key.properties" <<EOF
-          storeFile=upload-keystore.jks
-          storePassword=$CM_KEYSTORE_PASSWORD
-          keyAlias=$CM_KEY_ALIAS
-          keyPassword=$CM_KEY_ALIAS_PASSWORD
-          EOF
-      - name: Build signed AAB
-        script: |
-          cd android && ./gradlew bundleRelease
-    artifacts:
-      - android/app/build/outputs/**/*.aab
-    publishing:
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal
-        submit_as_draft: true
