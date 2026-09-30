@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 自動簽署最終版 —— iOS 專用
+# Codemagic 自動簽署最終對應版 —— iOS 專用
 # ============================================================
 workflows:
   ios-release:
@@ -33,6 +33,9 @@ workflows:
           xcode-project build-ipa \
             --workspace "ios/App/App.xcworkspace" \
             --scheme "App"
+    
+    integrations:
+      app_store_connect: APPLE API 1
 
     publishing:
       app_store_connect:
