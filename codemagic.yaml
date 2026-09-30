@@ -15,16 +15,22 @@ workflows:
             npx cap add ios
           fi
           
-          # 用絕對安全的單行 Node.js 指令注入 Podfile，徹底避開 YAML 縮排地獄
+          # 用單行 Node.js 指令安全地將 Pods 簽署關閉設定注入 Podfile，解決互相打架問題
           node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27\n    end\n  end");fs.writeFileSync(p,c,"utf8");console.log("Injected signing bypass successfully");}'
           
           npx cap sync ios
+
+      - name: Set up code signing profiles
+        script: |
+          # 自動將 Codemagic 網頁端上傳的描述檔安裝到 Xcode 讀取得到的位置
+          xcode-project use-profiles
 
       - name: Build and Export IPA
         script: |
           set -e
           mkdir -p build_output
 
+          # 帶入主專案簽署設定與描述檔（Pods 因為已關閉簽署，不會再干擾）
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
