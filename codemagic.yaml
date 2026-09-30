@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 純原生指令打包版 —— iOS 專用 (Bundle ID 寫死版)
+# Codemagic 純原生指令打包版 —— iOS 專用 (終極防呆版)
 # ============================================================
 workflows:
   ios-release:
@@ -32,13 +32,11 @@ workflows:
           fi
       - name: Set up code signing
         script: |
-          BUNDLE_ID="com.lightvlcl.2048Chinses2026"
-          echo "Using Bundle ID: $BUNDLE_ID"
-          
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+          app-store-connect fetch-signing-files "com.lightvlcl.2048Chinses2026" \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --create
       - name: Build and Export IPA
         script: |
           set -e
