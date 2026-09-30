@@ -6,6 +6,7 @@ workflows:
     environment:
       vars:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
+        TEAM_ID: "58RATT4ABA"
         APP_NAME: "App"
     scripts:
       - name: Install dependencies and sync Capacitor
@@ -20,46 +21,33 @@ workflows:
           
           npx cap sync ios
 
-      - name: Build and Export IPA with Smart Diagnostics
+      - name: Build and Export IPA with Manual Signing
         script: |
           set -e
           mkdir -p build_output
 
-          # 錯誤攔截器
+          # 錯誤攔截器與診斷
           trap '
             echo "========================================="
-            echo "🔍 [即時智慧診斷報告 - 發生錯誤]"
+            echo "🔍 [即時智慧診斷報告 - 手動簽署發生錯誤]"
             echo "========================================="
-            echo "錯誤代碼 65 通常代表 Xcode 找不到可用的 Apple 開發者帳號或憑證/描述檔。"
-            echo "【對應改善方法】"
-            echo "1. 請前往 Codemagic 專案設定頁面 (App settings > Integrations > App Store Connect)。"
-            echo "2. 綁定你的 App Store Connect API Key (Issuer ID, Key ID, Private Key)。"
-            echo "3. 確保 Apple Developer 官網 (developer.apple.com) 已手動建立 Bundle ID: com.lightvlcl.2048Chinses2026。"
+            echo "【當前檢查】"
+            echo "Team ID: 58RATT4ABA"
+            echo "Bundle ID: com.lightvlcl.2048Chinses2026"
+            echo "請確認 Codemagic 憑證管理中是否有上傳相對應的 App Store Distribution 憑證 (.p12)。"
             echo "========================================="
           ' ERR
 
-          # 嘗試強制更新描述檔並編譯
+          # 使用手動模式 (Manual Signing) 進行 Archive
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
             -archivePath build_output/App.xcarchive \
             archive \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="ZDK96PR9X3" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="58RATT4ABA" \
             PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
-            -allowProvisioningUpdates \
-            -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
-            -authenticationKeyPath "$HOME/.appstoreconnect/private_key/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8" || \
-          xcodebuild -workspace ios/App/App.xcworkspace \
-            -scheme "App" \
-            -configuration Release \
-            -archivePath build_output/App.xcarchive \
-            archive \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="ZDK96PR9X3" \
-            PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
-            -allowProvisioningUpdates
+            CODE_SIGN_IDENTITY="Apple Distribution"
 
           xcodebuild -exportArchive \
             -archivePath build_output/App.xcarchive \
@@ -67,8 +55,8 @@ workflows:
             -exportOptionsPlist <(cat <<EOF
           {
             "method": "app-store",
-            "signingStyle": "automatic",
-            "teamID": "ZDK96PR9X3",
+            "signingStyle": "manual",
+            "teamID": "58RATT4ABA",
             "stripSwiftSymbols": true
           }
           EOF
