@@ -1,6 +1,5 @@
 - name: Set up code signing
         script: |
-          # 讓 Codemagic 自動把網頁上傳的憑證與描述檔安裝到建置環境中
           app-store-connect initialize-signing
 
       - name: Build and Export IPA
@@ -8,7 +7,6 @@
           set -e
           mkdir -p build_output
 
-          # 使用手動簽署 (Manual Signing)，指定我們剛設定好的 Profile UUID
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
@@ -20,7 +18,6 @@
             DEVELOPMENT_TEAM="ZDK96PR9X3" \
             PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026"
 
-          # 匯出成 .ipa 檔案
           xcodebuild -exportArchive \
             -archivePath build_output/App.xcarchive \
             -exportPath build_output \
