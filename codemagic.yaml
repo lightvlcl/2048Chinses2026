@@ -32,20 +32,13 @@ workflows:
           echo "=== 正在安裝 npm 依賴套件 ==="
           npm install
 
-          # 3. 初始化鑰匙圈，並使用 macOS 原生 security 指令帶入密碼匯入 p12 憑證
+          # 3. 初始化鑰匙圈並匯入憑證
           keychain initialize
-          
           DEFAULT_KEYCHAIN=$(keychain get-default)
           echo "=== 正在使用密碼匯入 p12 憑證到鑰匙圈 ==="
           security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "snVWkEtR" -A -T /usr/bin/codesign
 
-          # 4. 安裝 mobileprovision 描述檔到系統目錄
-          PROFILE_UUID=$(grep -a -A 1 -E "<key>UUID</key>" "$PROFILE_PATH" | tail -n 1 | sed -e 's/<string>//g' -e 's/<\/string>//g' | tr -d '[:space:]')
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID.mobileprovision"
-          echo "✅ 描述檔安裝完成！UUID: $PROFILE_UUID"
-
-          # 5. 同步 Capacitor iOS 專案
+          # 4. 同步 Capacitor iOS 專案
           if [ ! -d "ios/App" ]; then
             echo "=== 正在自動補齊 iOS 平台專案 ==="
             npx cap add ios
@@ -53,25 +46,27 @@ workflows:
           
           npx cap sync ios
           
-          # 6. 自動修正 Info.plist 與專案檔內的 Bundle ID 為正確的名稱
+          # 5. 自動修正 Info.plist 與專案檔內的 Bundle ID
           echo "=== 正在全面修正 Bundle ID ==="
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
-          
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並打包
+          # 6. 安裝描述檔到系統
+          PROFILE_UUID=$(grep -a -A 1 -E "<key>UUID</key>" "$PROFILE_PATH" | tail -n 1 | sed -e 's/<string>//g' -e 's/<\/string>//g' | tr -d '[:space:]')
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID.mobileprovision"
+          echo "✅ 描述檔安裝完成！UUID: $PROFILE_UUID"
+
+          # 7. 進入 iOS 專案目錄
           cd ios/App
 
-          # 8. 開始進行 Xcode Archive 打包（強制指定手動簽署、Team ID 與 描述檔 UUID）
+          # 8. 使用 Xcode 專案自身設定進行 Archive（不強加命令列簽署覆蓋 Pods，避免 Pods 報錯）
           echo "=== 開始進行 Xcode Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
-                     CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
                      -allowProvisioningUpdates \
                      archive -archivePath build/App.xcarchive
                      
@@ -81,8 +76,7 @@ workflows:
           {
             "method": "ad-hoc",
             "teamID": "58RATT4ABA",
-            "signingStyle": "manual",
-            "signingCertificate": "Apple Distribution",
+            "signingStyle": "automatic",
             "provisioningProfiles": {
               "com.lightvlcl.2048Chinses2026": "$PROFILE_UUID"
             }
