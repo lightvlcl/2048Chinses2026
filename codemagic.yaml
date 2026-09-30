@@ -8,10 +8,6 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         APP_NAME: "App"
     scripts:
-      - name: Set up code signing
-        script: |
-          app-store-connect initialize-signing
-
       - name: Build and Export IPA
         script: |
           set -e
