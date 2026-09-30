@@ -11,6 +11,9 @@ workflows:
       - name: Install dependencies and sync Capacitor
         script: |
           npm install
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
           npx cap sync ios
       - name: Build and Export IPA
         script: |
