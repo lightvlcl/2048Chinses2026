@@ -39,7 +39,28 @@ workflows:
           echo "=== 正在使用密碼匯入 p12 憑證到鑰匙圈 ==="
           security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "snVWkEtR" -A -T /usr/bin/codesign
 
-          # 4. 同步 Capacitor iOS 專案
+          # 4. 安裝行動描述檔到系統指定目錄並取得 UUID
+          echo "=== 正在安裝行動描述檔 ==="
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          
+          PROVISIONING_PROFILE_UUID=$(python3 -c '
+          import plistlib, sys
+          try:
+              with open(sys.argv[1], "rb") as f:
+                  content = f.read()
+              start = content.index(b"<?xml")
+              end = content.rindex(b"</plist>") + len(b"</plist>")
+              plist_data = plistlib.loads(content[start:end])
+              print(plist_data["UUID"])
+          except Exception as e:
+              print(e, file=sys.stderr)
+              sys.exit(1)
+          ' "$PROFILE_PATH")
+
+          echo "🔑 成功取得描述檔 UUID: $PROVISIONING_PROFILE_UUID"
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
+
+          # 5. 同步 Capacitor iOS 專案
           if [ ! -d "ios/App" ]; then
             echo "=== 正在自動補齊 iOS 平台專案 ==="
             npx cap add ios
@@ -47,38 +68,41 @@ workflows:
 
           npx cap sync ios
 
-          # 5. 自動修正 Info.plist 與專案檔內的 Bundle ID
+          # 6. 自動修正 Info.plist 與專案檔內的 Bundle ID
           echo "=== 正在全面修正 Bundle ID ==="
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 6. 進入 iOS 專案目錄
+          # 7. 進入 iOS 專案目錄並設定手動簽署
           cd ios/App
-
-          # 7. 設定手動簽署並寫入 Team ID
           echo "=== 正在設定手動簽署 ==="
           sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' App.xcodeproj/project.pbxproj
           sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
 
-          # 8. 執行 Archive 打包
+          # 8. 執行 Archive 打包（帶入正確的描述檔 UUID）
           echo "=== 開始進行 Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
+                     CODE_SIGN_STYLE="Manual" \
                      CODE_SIGN_IDENTITY="Apple Distribution" \
+                     PROVISIONING_PROFILE="$PROVISIONING_PROFILE_UUID" \
                      archive -archivePath build/App.xcarchive
 
           # 9. 建立合法的 exportOptions.plist
           echo "=== 正在建立 exportOptions.plist ==="
           python3 -c '
-          import plistlib
+          import plistlib, sys
           data = {
               "method": "ad-hoc",
               "teamID": "58RATT4ABA",
               "signingStyle": "manual",
-              "signingCertificate": "Apple Distribution"
+              "signingCertificate": "Apple Distribution",
+              "provisioningProfiles": {
+                  "com.lightvlcl.2048Chinses2026": "'$PROVISIONING_PROFILE_UUID'"
+              }
           }
           with open("exportOptions.plist", "wb") as f:
               plistlib.dump(data, f)
