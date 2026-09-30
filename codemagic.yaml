@@ -23,7 +23,10 @@ workflows:
           set -e
           mkdir -p build_output
 
-          # 因為 Codemagic 後台已經自動處理好憑證與描述檔，直接執行打包
+          # 讓 Codemagic 自動將後台的憑證與描述檔注入專案
+          xcode-project use-profiles
+
+          # 執行 Xcode Build
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
