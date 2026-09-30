@@ -51,10 +51,10 @@ workflows:
           export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          # 3. 使用 Codemagic 內建的 appstore-tools 自動匹配與下載對應憑證
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE || true
+          # 3. 使用 app-store-connect 下載簽署檔案並指定產出
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE
 
-          # 4. 將描述檔與憑證注入 Xcode 專案
+          # 4. 將描述檔注入 Xcode 專案
           xcode-project use-profiles
 
           echo "✅ 憑證與描述檔設定完成！"
@@ -64,14 +64,20 @@ workflows:
           set -e
           echo "=== [3/4] 開始執行 Xcode Archive (手動簽署模式) ==="
           
+          # 取得自動下載進系統的 Provisioning Profile UUID
+          PROFILE_UUID=$(xcode-project detect-provisioning-profile --bundle-id "$BUNDLE_ID" || true)
+          echo "偵測到的 Provisioning Profile UUID: $PROFILE_UUID"
+
           if ! xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
             -archivePath build_output/App.xcarchive \
             archive \
             CODE_SIGN_STYLE="Manual" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID"; then
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            PROVISIONING_PROFILE="${PROFILE_UUID}"; then
             echo "❌ 【錯誤攔截】Xcode Archive 打包失敗！"
             exit 1
           fi
@@ -84,6 +90,9 @@ workflows:
           {
             "method": "app-store",
             "teamID": "$TEAM_ID",
+            "provisioningProfiles": {
+              "$BUNDLE_ID": "$PROFILE_UUID"
+            },
             "stripSwiftSymbols": true
           }
           EOF
