@@ -15,7 +15,7 @@ workflows:
             unzip -o ios.zip
           fi
           
-          # 修正雙重副檔名問題（如果有的話）
+          # 修正雙重副檔名問題
           if [ -f "ios/cert/distribution.p12.p12" ]; then
             mv ios/cert/distribution.p12.p12 ios/cert/distribution.p12
             echo "✅ 已將憑證重新命名為標準 distribution.p12"
@@ -32,7 +32,7 @@ workflows:
           echo "=== 正在安裝 npm 依賴套件 ==="
           npm install
 
-          # 3. 初始化鑰匙圈並匯入憑證
+          # 3. 初始化鑰匙圈並匯入憑證（因為沒設密碼，直接不帶 --passphrase）
           keychain initialize
           
           echo "=== 正在匯入 p12 憑證到鑰匙圈 ==="
@@ -53,10 +53,10 @@ workflows:
           npx cap sync ios
           
           # 6. 自動修正專案 Bundle ID
-          echo "=== 正在修正 Bundle ID ==="
+          echo "=== 修正主專案 Bundle ID ==="
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
 
-          # 7. 進入 iOS 專案目錄並打包
+          # 7. 進入 iOS 專案目錄並打包（針對主 Target App 套用簽署，避免 Pods 報錯）
           cd ios/App
           
           echo "=== 開始進行 Xcode Archive 打包 ==="
@@ -67,7 +67,7 @@ workflows:
                      CODE_SIGN_STYLE=Manual \
                      CODE_SIGN_IDENTITY="Apple Distribution" \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
-                     PROVISIONING_PROFILE="$PROFILE_UUID" \
+                     PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
                      PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
                      archive -archivePath build/App.xcarchive
                      
