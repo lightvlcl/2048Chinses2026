@@ -74,13 +74,9 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並改為【手動簽署 Manual】，綁定 Team 與 UUID 描述檔
+          # 7. 進入 iOS 專案目錄並設定主 App 手動簽署
           cd ios/App
           echo "=== 正在設定手動簽署與 Development Team ==="
-
-          find . -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' {} +
-          sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
-          find . -name "project.pbxproj" -exec sed -i '' 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/g' {} +
 
           python3 -c '
           import sys, re
@@ -88,20 +84,16 @@ workflows:
           with open(pbxproj_path, "r") as f:
               content = f.read()
 
-          uuid = "'"$PROVISIONING_PROFILE_UUID"'"
-
-          content = re.sub(
-              r"(CODE_SIGN_IDENTITY = \"iPhone Distribution\";)(?![\s\S]*PROVISIONING_PROFILE)",
-              r"\1\n					PROVISIONING_PROFILE = \"" + uuid + r"\";",
-              content
-          )
+          team_id = "58RATT4ABA"
+          content = re.sub(r"DevelopmentTeam = \"([^\"]*)\";", f"DevelopmentTeam = \"{team_id}\";", content)
+          content = re.sub(r"CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;", content)
 
           with open(pbxproj_path, "w") as f:
               f.write(content)
-          print("✅ 成功將描述檔 UUID 寫入 Xcode 專案設定")
+          print("✅ 成功更新專案簽署設定")
           '
 
-          # 8. 執行 Archive 打包（強制指定 iPhone Distribution 憑證，不尋找 Development 憑證）
+          # 8. 執行 Archive 打包（使用專案層級配置，避免 Pods 受到影響）
           echo "=== 開始進行 Archive 打包 (Manual Signing) ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
@@ -110,7 +102,6 @@ workflows:
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_STYLE="Manual" \
                      CODE_SIGN_IDENTITY="iPhone Distribution" \
-                     PROVISIONING_PROFILE="$PROVISIONING_PROFILE_UUID" \
                      archive -archivePath build/App.xcarchive
 
           # 9. 建立合法的 exportOptions.plist（手動模式）
