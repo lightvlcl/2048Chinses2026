@@ -93,7 +93,7 @@ workflows:
           print("✅ 成功更新專案簽署設定")
           '
 
-          # 8. 執行 Archive 打包（使用專案層級配置，避免 Pods 受到影響）
+          # 8. 執行 Archive 打包（精準帶入 Provisioning Profile UUID）
           echo "=== 開始進行 Archive 打包 (Manual Signing) ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
@@ -102,6 +102,7 @@ workflows:
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_STYLE="Manual" \
                      CODE_SIGN_IDENTITY="iPhone Distribution" \
+                     PROVISIONING_PROFILE="$PROVISIONING_PROFILE_UUID" \
                      archive -archivePath build/App.xcarchive
 
           # 9. 建立合法的 exportOptions.plist（手動模式）
