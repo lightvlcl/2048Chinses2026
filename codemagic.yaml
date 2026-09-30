@@ -14,12 +14,15 @@ workflows:
           if [ ! -d "ios" ]; then
             npx cap add ios
           fi
+          
+          # 安全注入 Pods 簽署繞過設定，避免互相打架
           node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27\n    end\n  end");fs.writeFileSync(p,c,"utf8");console.log("Injected signing bypass successfully");}'
+          
           npx cap sync ios
 
-      # 【非常重要】必須確保有這一個步驟，雲端機器才會安裝描述檔！
       - name: Set up code signing profiles
         script: |
+          # 讓雲端機器自動安裝你在後台上傳的描述檔
           xcode-project use-profiles
 
       - name: Build and Export IPA
