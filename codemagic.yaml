@@ -22,7 +22,7 @@ workflows:
 
       - name: Set up code signing profiles
         script: |
-          # 自動將 Codemagic 網頁端上傳的描述檔安裝到 Xcode 讀取得到的位置
+          # 這行指令會自動把你在 Codemagic 帳戶上傳且符合 Bundle ID 的描述檔安裝到專案中
           xcode-project use-profiles
 
       - name: Build and Export IPA
@@ -30,7 +30,6 @@ workflows:
           set -e
           mkdir -p build_output
 
-          # 帶入主專案簽署設定與描述檔（Pods 因為已關閉簽署，不會再干擾）
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
