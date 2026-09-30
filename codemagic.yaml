@@ -14,23 +14,36 @@ workflows:
           if [ ! -d "ios" ]; then
             npx cap add ios
           fi
+          
+          # 自動在 Podfile 加入語法，強制關閉 Pods 的簽署需求，解決互相打架的問題
+          if [ -f "ios/App/Podfile" ]; then
+            echo "
+          post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+              end
+            end
+          end
+          " >> ios/App/Podfile
+          fi
+
           npx cap sync ios
-      - name: Set up code signing profiles
-        script: |
-          # 自動將你在 Codemagic 網頁上傳的描述檔安全地對應到專案主體
-          xcode-project use-profiles
+
       - name: Build and Export IPA
         script: |
           set -e
           mkdir -p build_output
 
-          # 移除會汙染 Pods 的全域 Profile 指定，改由上面步驟自動處理
+          # 將正確的描述檔指定帶回主專案打包
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
             -archivePath build_output/App.xcarchive \
             archive \
             CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution: LI Vincent (58RATT4ABA)" \
+            PROVISIONING_PROFILE_SPECIFIER="Game2048Profile" \
             DEVELOPMENT_TEAM="ZDK96PR9X3" \
             PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026"
 
