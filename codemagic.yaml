@@ -51,8 +51,8 @@ workflows:
           export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          # 3. 使用 app-store-connect 下載簽署檔案並指定產出
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE
+          # 3. 強制自動建立與下載簽署檔案（--create 會自動處理私鑰問題）
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
 
           # 4. 將描述檔注入 Xcode 專案
           xcode-project use-profiles
@@ -64,7 +64,6 @@ workflows:
           set -e
           echo "=== [3/4] 開始執行 Xcode Archive (手動簽署模式) ==="
           
-          # 取得自動下載進系統的 Provisioning Profile UUID
           PROFILE_UUID=$(xcode-project detect-provisioning-profile --bundle-id "$BUNDLE_ID" || true)
           echo "偵測到的 Provisioning Profile UUID: $PROFILE_UUID"
 
