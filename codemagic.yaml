@@ -77,32 +77,11 @@ workflows:
           cd ios/App
           echo "=== 正在設定手動簽署與 Team/Profile ==="
           sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
-          
-          # 將簽署風格改為 Manual 並寫入描述檔 UUID
-          python3 -c '
-          import sys, re
-          proj_path = "App.xcodeproj/project.pbxproj"
-          with open(proj_path, "r") as f:
-              content = f.read()
 
-          # 將 Automatic 改為 Manual
-          content = content.replace("CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;")
-          
-          # 確保在 Release / Debug 設定中帶入 PROVISIONING_PROFILE 和 SPECIFIER
-          # 這裡直接在 target 設定中插入 Provisioning Profile UUID
-          uuid = "'$PROVISIONING_PROFILE_UUID'"
-          
-          # 簡單示範在 build settings 補上項目
-          # 如果原本沒有 ProvisioningProfileSpecifier，我們幫它加上
-          # 為了保險，我們直接使用 sed 批次替換或透過 python 精準寫入
-          with open(proj_path, "w") as f:
-              f.write(content)
-          '
-          
-          # 用 sed 直接在 pbxproj 寫入 PROVISIONING_PROFILE 與 PROVISIONING_PROFILE_SPECIFIER
+          # 用 sed 直接在 pbxproj 寫入 PROVISIONING_PROFILE
           sed -i '' 's/CODE_SIGN_STYLE = Manual;/CODE_SIGN_STYLE = Manual;\n\t\t\t\tPROVISIONING_PROFILE = "'$PROVISIONING_PROFILE_UUID'";/g' App.xcodeproj/project.pbxproj
 
-          # 8. 執行 Archive 打包（使用手動簽署）
+          # 8. 執行 Archive 打包（指定使用 Apple Distribution 憑證）
           echo "=== 開始進行 Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
@@ -110,6 +89,7 @@ workflows:
                      -configuration Release \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_STYLE="Manual" \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
                      PROVISIONING_PROFILE="$PROVISIONING_PROFILE_UUID" \
                      archive -archivePath build/App.xcarchive
 
@@ -121,6 +101,7 @@ workflows:
               "method": "ad-hoc",
               "teamID": "58RATT4ABA",
               "signingStyle": "manual",
+              "signingCertificate": "Apple Distribution",
               "provisioningProfiles": {
                   "com.lightvlcl.2048Chinses2026": "'$PROVISIONING_PROFILE_UUID'"
               }
