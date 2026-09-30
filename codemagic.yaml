@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 終極免名稱對應版 —— iOS 專用
+# Codemagic 最終正確版 —— iOS 專用
 # ============================================================
 workflows:
   ios-release:
@@ -10,7 +10,7 @@ workflows:
       node: v22
       xcode: latest
       groups:
-        - ios_keys     # <--- 加上這行，對應你在後台建的變數群組名稱
+        - ios_keys
     scripts:
       - name: Install dependencies
         script: npm install
@@ -35,12 +35,12 @@ workflows:
           xcode-project build-ipa \
             --workspace "ios/App/App.xcworkspace" \
             --scheme "App"
+    
+    integrations:
+      app_store_connect: APPLE API 1
 
     publishing:
       app_store_connect:
-        auth: api_key
-        issuer_id: 0b40cc93-4f2b-435d-8ba3-e59e0221e1f0
-        key_id: ZDK96PR9X3
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
