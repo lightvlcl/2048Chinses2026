@@ -18,14 +18,26 @@ workflows:
           node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27;\n    end;\n  end;");fs.writeFileSync(p,c,"utf8");}' || true
           npx cap sync ios
 
-      - name: Fetch Signing Files & Build IPA
+      - name: Build and Export IPA
         script: |
           set -e
           mkdir -p build_output
-          keychain initialize
-          app-store-connect fetch-signing-files --type IOS_APP_STORE com.lightvlcl.2048Chinses2026
-          xcodebuild -workspace ios/App/App.xcworkspace -scheme "App" -configuration Release -archivePath build_output/App.xcarchive archive CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="58RATT4ABA" PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" -allowProvisioningUpdates
-          xcodebuild -exportArchive -archivePath build_output/App.xcarchive -exportPath build_output -exportOptionsPlist <(cat <<EOF
+
+          # 因為 Codemagic 後台已經自動處理好憑證與描述檔，直接執行打包
+          xcodebuild -workspace ios/App/App.xcworkspace \
+            -scheme "App" \
+            -configuration Release \
+            -archivePath build_output/App.xcarchive \
+            archive \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="58RATT4ABA" \
+            PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
+            -allowProvisioningUpdates
+
+          xcodebuild -exportArchive \
+            -archivePath build_output/App.xcarchive \
+            -exportPath build_output \
+            -exportOptionsPlist <(cat <<EOF
           {
             "method": "app-store",
             "signingStyle": "automatic",
