@@ -10,7 +10,7 @@ workflows:
         script: |
           npm install
           
-      - name: 初始化鑰匙圈並手動安裝憑證
+      - name: 本地憑證安裝與 Xcode 打包
         script: |
           # 1. 建立並初始化鑰匙圈
           keychain initialize
@@ -23,7 +23,7 @@ workflows:
           echo "=== 正在匯入 p12 憑證 ==="
           keychain add-certificates --certificate "$CERT_PATH"
           
-          # 4. 手動安裝 mobileprovision 描述檔
+          # 4. 手動安裝 mobileprovision 描述檔並抓取 UUID
           echo "=== 正在安裝 mobileprovision 描述檔 ==="
           PROFILE_UUID=$(grep -a -A 1 -E "<key>UUID</key>" "$PROFILE_PATH" | tail -n 1 | sed -e 's/<string>//g' -e 's/<\/string>//g' | tr -d '[:space:]')
           
@@ -32,9 +32,7 @@ workflows:
           
           echo "✅ 本地憑證與描述檔安裝完成！UUID: $PROFILE_UUID"
 
-      - name: Build IPA with Xcode
-        script: |
-          # 1. 如果找不到 ios/App，自動透過 Capacitor 補齊 iOS 平台結構
+          # 5. 同步 Capacitor iOS 專案結構
           if [ ! -d "ios/App" ]; then
             echo "=== 正在自動補齊 iOS 平台專案 ==="
             npx cap add ios
@@ -42,17 +40,19 @@ workflows:
           
           npx cap sync ios
           
-          # 2. 進入 iOS 專案目錄
+          # 6. 進入 iOS 專案目錄
           cd ios/App
           
-          # 3. 開始進行 xcodebuild 打包
+          # 7. 開始進行 xcodebuild 手動簽署與打包
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
+                     CODE_SIGN_STYLE=Manual \
+                     PROVISIONING_PROFILE="$PROFILE_UUID" \
                      archive -archivePath build/App.xcarchive
                      
-          # 4. 匯出 .ipa 檔案
+          # 8. 匯出 .ipa 檔案
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist exportOptions.plist \
