@@ -15,19 +15,22 @@ workflows:
             npx cap add ios
           fi
           npx cap sync ios
+      - name: Set up code signing profiles
+        script: |
+          # 自動將你在 Codemagic 網頁上傳的描述檔安全地對應到專案主體
+          xcode-project use-profiles
       - name: Build and Export IPA
         script: |
           set -e
           mkdir -p build_output
 
+          # 移除會汙染 Pods 的全域 Profile 指定，改由上面步驟自動處理
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
             -archivePath build_output/App.xcarchive \
             archive \
             CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution: LI Vincent (58RATT4ABA)" \
-            PROVISIONING_PROFILE_SPECIFIER="Game2048Profile" \
             DEVELOPMENT_TEAM="ZDK96PR9X3" \
             PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026"
 
