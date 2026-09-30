@@ -73,38 +73,30 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並設定手動簽署、Development Team 與 Provisioning Profile UUID
+          # 7. 進入 iOS 專案目錄並設定 Development Team（不強制綁定有衝突的 Profile）
           cd ios/App
-          echo "=== 正在設定手動簽署與 Team/Profile ==="
+          echo "=== 正在設定 Development Team ==="
           sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
 
-          # 用 sed 直接在 pbxproj 寫入 PROVISIONING_PROFILE
-          sed -i '' 's/CODE_SIGN_STYLE = Manual;/CODE_SIGN_STYLE = Manual;\n\t\t\t\tPROVISIONING_PROFILE = "'$PROVISIONING_PROFILE_UUID'";/g' App.xcodeproj/project.pbxproj
-
-          # 8. 執行 Archive 打包（指定使用 Apple Distribution 憑證）
+          # 8. 執行 Archive 打包（使用命令列覆蓋憑證與 team，避免 Pods 互相污染）
           echo "=== 開始進行 Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
-                     CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     PROVISIONING_PROFILE="$PROVISIONING_PROFILE_UUID" \
+                     CODE_SIGN_STYLE="Automatic" \
+                     -allowProvisioningUpdates \
                      archive -archivePath build/App.xcarchive
 
-          # 9. 建立合法的 exportOptions.plist（手動簽署模式）
+          # 9. 建立合法的 exportOptions.plist
           echo "=== 正在建立 exportOptions.plist ==="
           python3 -c '
           import plistlib, sys
           data = {
               "method": "ad-hoc",
               "teamID": "58RATT4ABA",
-              "signingStyle": "manual",
-              "signingCertificate": "Apple Distribution",
-              "provisioningProfiles": {
-                  "com.lightvlcl.2048Chinses2026": "'$PROVISIONING_PROFILE_UUID'"
-              }
+              "signingStyle": "automatic"
           }
           with open("exportOptions.plist", "wb") as f:
               plistlib.dump(data, f)
@@ -115,7 +107,8 @@ workflows:
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist exportOptions.plist \
-                     -exportPath ../../build_output
+                     -exportPath ../../build_output \
+                     -allowProvisioningUpdates
 
           echo "🎉 打包流程大功告成！"
 
