@@ -1,4 +1,14 @@
-- name: 穩健手動簽署打包流程
+workflows:
+  ios-release-workflow:
+    name: iOS Release Workflow
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      vars:
+        BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
+        TEAM_ID: "58RATT4ABA"
+    scripts:
+      - name: 穩健手動簽署打包流程
         script: |
           set -e
           
@@ -48,8 +58,6 @@
           ' "$PROFILE_PATH")
 
           echo "🔑 成功取得描述檔 UUID: $PROVISIONING_PROFILE_UUID"
-          
-          # 將描述檔複製到 Xcode 識別的資料夾，並以 UUID 命名
           cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
 
           # 5. 同步 Capacitor iOS 專案
@@ -65,24 +73,13 @@
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並設定手動簽署與對應的 UUID
+          # 7. 進入 iOS 專案目錄並設定手動簽署
           cd ios/App
-          echo "=== 正在設定手動簽署與 UUID ==="
+          echo "=== 正在設定手動簽署 ==="
           sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' App.xcodeproj/project.pbxproj
           sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
-          
-          # 把 UUID 寫入專案檔中，確保只有 App Target 套用
-          python3 -c '
-          import sys
-          project_file = "App.xcodeproj/project.pbxproj"
-          with open(project_file, "r") as f:
-              content = f.read()
-          # 在手動簽署下方加入 Provisioning Profile Specifier 或 UUID
-          # 這裡我們利用加入 PROVISIONING_PROFILE_SPECIFIER 讓 Xcode 抓取描述檔名稱或 UUID
-          print("正在注入簽署設定...")
-          '
 
-          # 8. 執行純淨的 Archive 打包（移除全域 PROVISIONING_PROFILE 參數，避免汙染 Pods）
+          # 8. 執行 Archive 打包
           echo "=== 開始進行 Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
@@ -118,3 +115,6 @@
                      -exportPath ../../build_output
 
           echo "🎉 打包流程大功告成！"
+
+    artifacts:
+      - build_output/*.ipa
