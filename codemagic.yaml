@@ -31,7 +31,7 @@ workflows:
           set -e
           mkdir -p build_output
 
-          echo "=== [2/4] 初始化鑰匙圈與自動抓取現有憑證/描述檔 ==="
+          echo "=== [2/4] 初始化鑰匙圈與自動建立/抓取憑證與描述檔 ==="
           keychain initialize
 
           # 1. 安全寫入 .p8 API 私鑰檔案
@@ -51,15 +51,12 @@ workflows:
           export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          # 3. 動態產生用於匯入憑證的暫時私鑰
-          openssl genrsa -out cert_private_key.pem 2048
-
-          # 4. 抓取已存在的憑證與描述檔（補回憑證私鑰參數讓工具可以寫入鑰匙圈）
+          # 3. 透過 API 自動建立並抓取合適的憑證與描述檔（帶入 --create 讓工具自動產生對應私鑰）
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
-            --certificate-key "$(cat cert_private_key.pem)"
+            --create
 
-          # 5. 將描述檔注入 Xcode 專案
+          # 4. 將描述檔注入 Xcode 專案
           xcode-project use-profiles
 
           echo "✅ 憑證與描述檔抓取並注入完成！"
