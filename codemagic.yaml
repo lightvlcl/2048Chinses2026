@@ -1,134 +1,131 @@
-workflows:
-  ios-release-workflow:
-    name: iOS Release Workflow
-    max_build_duration: 60
-    instance_type: mac_mini_m2
-    environment:
-      vars:
-        BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
-        TEAM_ID: "58RATT4ABA"
-    scripts:
-      - name: 穩健手動簽署打包流程
-        script: |
-          #!/usr/bin/env bash
+#!/usr/bin/env bash
 
-          set -e
+set -e
 
-          # 1. 自動解壓縮憑證包（含防呆與雙重副檔名修正）
-          if [ -f "ios.zip" ]; then
-            echo "=== 正在解壓縮 ios.zip ==="
-            unzip -o ios.zip
-          fi
+# 1. 自動解壓縮憑證包（含防呆與雙重副檔名修正）
+if [ -f "ios.zip" ]; then
+  echo "=== 正在解壓縮 ios.zip ==="
+  unzip -o ios.zip
+fi
 
-          if [ -f "ios/cert/distribution.p12.p12" ]; then
-            mv ios/cert/distribution.p12.p12 ios/cert/distribution.p12
-            echo "✅ 已將憑證重新命名為標準 distribution.p12"
-          fi
+if [ -f "ios/cert/distribution.p12.p12" ]; then
+  mv ios/cert/distribution.p12.p12 ios/cert/distribution.p12
+  echo "✅ 已將憑證重新命名為標準 distribution.p12"
+fi
 
-          CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
-          PROFILE_PATH=$(find . -name "profile.mobileprovision" | head -n 1)
-          echo "✅ 定位憑證路徑: $CERT_PATH"
-          echo "✅ 定位描述檔路徑: $PROFILE_PATH"
+CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
+PROFILE_PATH=$(find . -name "profile.mobileprovision" | head -n 1)
+echo "✅ 定位憑證路徑: $CERT_PATH"
+echo "✅ 定位描述檔路徑: $PROFILE_PATH"
 
-          # 2. 安裝 npm 依賴
-          echo "=== 正在安裝 npm 依賴套件 ==="
-          npm install
+# 2. 安裝 npm 依賴
+echo "=== 正在安裝 npm 依賴套件 ==="
+npm install
 
-          # 3. 初始化鑰匙圈並匯入 p12 憑證
-          keychain initialize
-          DEFAULT_KEYCHAIN=$(keychain get-default)
-          echo "=== 正在使用密碼匯入 p12 憑證到鑰匙圈 ==="
-          security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "snVWkEtR" -A -T /usr/bin/codesign
+# 3. 初始化鑰匙圈並匯入 p12 憑證
+keychain initialize
+DEFAULT_KEYCHAIN=$(keychain get-default)
+echo "=== 正在使用密碼匯入 p12 憑證到鑰匙圈 ==="
+security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "snVWkEtR" -A -T /usr/bin/codesign
 
-          # 4. 安裝行動描述檔到系統指定目錄並取得 UUID
-          echo "=== 正在安裝行動描述檔 ==="
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+# 4. 安裝行動描述檔到系統指定目錄並取得 UUID
+echo "=== 正在安裝行動描述檔 ==="
+mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
 
-          PROVISIONING_PROFILE_UUID=$(python3 -c '
-          import plistlib, sys
-          try:
-              with open(sys.argv[1], "rb") as f:
-                  content = f.read()
-              start = content.index(b"<?xml")
-              end = content.rindex(b"</plist>") + len(b"</plist>")
-              plist_data = plistlib.loads(content[start:end])
-              print(plist_data["UUID"])
-          except Exception as e:
-              print(e, file=sys.stderr)
-              sys.exit(1)
-          ' "$PROFILE_PATH")
+PROVISIONING_PROFILE_UUID=$(python3 -c '
+import plistlib, sys
+try:
+    with open(sys.argv[1], "rb") as f:
+        content = f.read()
+    start = content.index(b"<?xml")
+    end = content.rindex(b"</plist>") + len(b"</plist>")
+    plist_data = plistlib.loads(content[start:end])
+    print(plist_data["UUID"])
+except Exception as e:
+    print(e, file=sys.stderr)
+    sys.exit(1)
+' "$PROFILE_PATH")
 
-          echo "🔑 成功取得描述檔 UUID: $PROVISIONING_PROFILE_UUID"
-          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
+echo "🔑 成功取得描述檔 UUID: $PROVISIONING_PROFILE_UUID"
+cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
 
-          # 5. 同步 Capacitor iOS 專案
-          if [ ! -d "ios/App" ]; then
-            echo "=== 正在自動補齊 iOS 平台專案 ==="
-            npx cap add ios
-          fi
+# 5. 同步 Capacitor iOS 專案
+if [ ! -d "ios/App" ]; then
+  echo "=== 正在自動補齊 iOS 平台專案 ==="
+  npx cap add ios
+fi
 
-          npx cap sync ios
+npx cap sync ios
 
-          # 6. 自動修正 Info.plist 與專案檔內的 Bundle ID
-          echo "=== 正在全面修正 Bundle ID ==="
-          plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
-          find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
+# 6. 自動修正 Info.plist 與專案檔內的 Bundle ID
+echo "=== 正在全面修正 Bundle ID ==="
+plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
+find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並設定主 App 手動簽署
-          cd ios/App
-          echo "=== 正在設定手動簽署與 Development Team ==="
+# 7. 進入 iOS 專案目錄並設定手動簽署（同時修正 Pods 專案設定）
+cd ios/App
+echo "=== 正在設定手動簽署與 Development Team ==="
 
-          python3 -c '
-          import sys, re
-          pbxproj_path = "App.xcodeproj/project.pbxproj"
-          with open(pbxproj_path, "r") as f:
-              content = f.read()
+python3 -c '
+import sys, re
+pbxproj_path = "App.xcodeproj/project.pbxproj"
+with open(pbxproj_path, "r") as f:
+    content = f.read()
 
-          team_id = "58RATT4ABA"
-          content = re.sub(r"DevelopmentTeam = \"([^\"]*)\";", f"DevelopmentTeam = \"{team_id}\";", content)
-          content = re.sub(r"CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;", content)
+team_id = "58RATT4ABA"
+content = re.sub(r"DevelopmentTeam = \"([^\"]*)\";", f"DevelopmentTeam = \"{team_id}\";", content)
+content = re.sub(r"CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;", content)
 
-          with open(pbxproj_path, "w") as f:
-              f.write(content)
-          print("✅ 成功更新專案簽署設定")
-          '
+with open(pbxproj_path, "w") as f:
+    f.write(content)
 
-          # 8. 執行 Archive 打包（精準帶入 Provisioning Profile UUID）
-          echo "=== 開始進行 Archive 打包 (Manual Signing) ==="
-          xcodebuild -workspace App.xcworkspace \
-                     -scheme App \
-                     -sdk iphoneos \
-                     -configuration Release \
-                     DEVELOPMENT_TEAM="58RATT4ABA" \
-                     CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="iPhone Distribution" \
-                     PROVISIONING_PROFILE="$PROVISIONING_PROFILE_UUID" \
-                     archive -archivePath build/App.xcarchive
+# 同時清理 Pods 專案的簽署設定，改回 Automatic 避免 Pods 誤用描述檔報錯
+pods_pbx = "../Pods/Pods.xcodeproj/project.pbxproj"
+try:
+    with open(pods_pbx, "r") as f:
+        pods_content = f.read()
+    pods_content = re.sub(r"CODE_SIGN_STYLE = Manual;", "CODE_SIGN_STYLE = Automatic;", pods_content)
+    pods_content = re.sub(r"PROVISIONING_PROFILE_SPECIFIER = \"[^\"]*\";", "", pods_content)
+    with open(pods_pbx, "w") as f:
+        f.write(pods_content)
+    print("✅ 成功更新主專案與 Pods 簽署設定")
+except Exception as e:
+    print("⚠️ Pods 專案調整略過:", e)
+'
 
-          # 9. 建立合法的 exportOptions.plist（手動模式）
-          echo "=== 正在建立 exportOptions.plist ==="
-          python3 -c '
-          import plistlib, sys
-          data = {
-              "method": "ad-hoc",
-              "teamID": "58RATT4ABA",
-              "signingStyle": "manual",
-              "provisioningProfiles": {
-                  "com.lightvlcl.2048Chinses2026": "'"$PROVISIONING_PROFILE_UUID"'"
-              }
-          }
-          with open("exportOptions.plist", "wb") as f:
-              plistlib.dump(data, f)
-          '
+# 8. 執行 Archive 打包（精準帶入 Provisioning Profile UUID）
+echo "=== 開始進行 Archive 打包 (Manual Signing) ==="
+xcodebuild -workspace App.xcworkspace \
+           -scheme App \
+           -sdk iphoneos \
+           -configuration Release \
+           DEVELOPMENT_TEAM="58RATT4ABA" \
+           CODE_SIGN_STYLE="Manual" \
+           CODE_SIGN_IDENTITY="iPhone Distribution" \
+           PROVISIONING_PROFILE="$PROVISIONING_PROFILE_UUID" \
+           archive -archivePath build/App.xcarchive
 
-          # 10. 正在匯出 .ipa 檔案
-          echo "=== 正在匯出 .ipa 檔案 ==="
-          xcodebuild -exportArchive \
-                     -archivePath build/App.xcarchive \
-                     -exportOptionsPlist exportOptions.plist \
-                     -exportPath ../../build_output
+# 9. 建立合法的 exportOptions.plist（手動模式）
+echo "=== 正在建立 exportOptions.plist ==="
+python3 -c '
+import plistlib, sys
+data = {
+    "method": "ad-hoc",
+    "teamID": "58RATT4ABA",
+    "signingStyle": "manual",
+    "provisioningProfiles": {
+        "com.lightvlcl.2048Chinses2026": "'"$PROVISIONING_PROFILE_UUID"'"
+    }
+}
+with open("exportOptions.plist", "wb") as f:
+    plistlib.dump(data, f)
+'
 
-          echo "🎉 打包流程大功告成！"
+# 10. 正在匯出 .ipa 檔案
+echo "=== 正在匯出 .ipa 檔案 ==="
+xcodebuild -exportArchive \
+           -archivePath build/App.xcarchive \
+           -exportOptionsPlist exportOptions.plist \
+           -exportPath ../../build_output
 
-    artifacts:
-      - build_output/*.ipa
+echo "🎉 打包流程大功告成！"
