@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 云构建配置 —— iOS 签名打包 + 上传 App Store Connect
+# Codemagic 自動簽署版 —— iOS 專用
 # ============================================================
 workflows:
   ios-release:
@@ -28,6 +28,12 @@ workflows:
           if [ -f "$ICON_DIR/AppIcon-512.png" ]; then
             cp resources/icon-1024.png "$ICON_DIR/AppIcon-512.png"
           fi
+      - name: Initialize code signing settings
+        script: |
+          # 讓 Codemagic 自動透過 API 抓取或建立憑證與描述檔
+          app-store-connect fetch-signing-files "$bundle_identifier" \
+            --type "$distribution_type" \
+            --create
       - name: Set up code signing
         script: xcode-project use-profiles
       - name: Build IPA
@@ -36,8 +42,12 @@ workflows:
           xcode-project build-ipa \
             --workspace "ios/App/App.xcworkspace" \
             --scheme "App"
+    
+    # 關鍵：在 workflow 內宣告整合，對應後台金鑰名稱
     integrations:
       app_store_connect: APPLE API 1
+
+    # 關鍵：正確的巢狀發布結構
     publishing:
       app_store_connect:
         auth: integration
