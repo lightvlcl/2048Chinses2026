@@ -73,11 +73,31 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並設定手動簽署
+          # 7. 進入 iOS 專案目錄並設定手動簽署與綁定描述檔 UUID
           cd ios/App
-          echo "=== 正在設定手動簽署 ==="
+          echo "=== 正在設定手動簽署與描述檔綁定 ==="
           sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' App.xcodeproj/project.pbxproj
           sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
+
+          # 利用 Python 將 PROVISIONING_PROFILE 注入專案設定中（僅影響 App 目標）
+          python3 -c '
+          import sys
+          proj_path = "App.xcodeproj/project.pbxproj"
+          with open(proj_path, "r") as f:
+              lines = f.readlines()
+
+          new_lines = []
+          for line in lines:
+              new_lines.append(line)
+              if "CODE_SIGN_STYLE = Manual;" in line:
+                  indent = line[:line.index("CODE_SIGN_STYLE")]
+                  new_lines.append(f"{indent}PROVISIONING_PROFILE = \"'$PROVISIONING_PROFILE_UUID'\";\n")
+                  new_lines.append(f"{indent}PROVISIONING_PROFILE_SPECIFIER = \"2048 Distribution Profile\";\n")
+
+          with open(proj_path, "w") as f:
+              f.writelines(new_lines)
+          print("✅ 成功將描述檔 UUID 與名稱注入 App 專案設定")
+          '
 
           # 8. 執行 Archive 打包
           echo "=== 開始進行 Archive 打包 ==="
