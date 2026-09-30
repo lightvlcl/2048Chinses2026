@@ -10,6 +10,24 @@ workflows:
         script: |
           npm install
           
+      - name: 解壓縮 iOS 憑證與專案資產
+        script: |
+          # 如果雲端抓到的是 ios.zip，自動將其解壓縮還原為 ios 資料夾
+          if [ -f "ios.zip" ]; then
+            echo "=== 正在解壓縮 ios.zip ==="
+            unzip -o ios.zip
+          elif [ -f "ios/ios.zip" ]; then
+            echo "=== 正在從 ios 目錄解壓縮 ==="
+            unzip -o ios/ios.zip -d ios/
+          fi
+          
+          # 確認解壓縮後的憑證是否存在
+          if [ -f "ios/cert/distribution.p12" ]; then
+            echo "✅ 成功找到 distribution.p12 憑證！"
+          else
+            echo "⚠️ 警告：仍未找到 p12 憑證，請確認 zip 檔結構。"
+          fi
+
       - name: 本地憑證安裝與 Xcode 打包
         script: |
           # 1. 建立並初始化鑰匙圈
