@@ -17,7 +17,39 @@ workflows:
     scripts:
       - name: Install dependencies
         script: npm install
+      - name: Prepare iOS projectscripts:
+      - name: Install dependencies
+        script: npm install
       - name: Prepare iOS project
+        script: |
+          if [ ! -d ios ]; then
+            npx cap add ios
+          fi
+          npx cap sync ios
+      - name: Apply app icon
+        script: |
+          ICON_DIR="ios/App/App/Assets.xcassets/AppIcon.appiconset"
+          cp resources/icon-1024.png "$ICON_DIR/AppIcon-512@2x.png"
+          if [ -f "$ICON_DIR/AppIcon-512.png" ]; then
+            cp resources/icon-1024.png "$ICON_DIR/AppIcon-512.png"
+          fi
+      - name: Set up code signing
+        script: |
+          app-store-connect fetch-signing-profiles \
+            --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
+          xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          set -e
+          xcode-project build-ipa \
+            --workspace "ios/App/App.xcworkspace" \
+            --scheme "App"
+      - name: Publish to TestFlight
+        script: |
+          app-store-connect publish \
+            --path "$(find $(pwd) -name "*.ipa")"
         script: |
           if [ ! -d ios ]; then
             npx cap add ios
