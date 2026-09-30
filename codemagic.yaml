@@ -37,7 +37,7 @@ workflows:
             --workspace "ios/App/App.xcworkspace" \
             --scheme "App"
     publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        submit_to_app_store: false
+      # 這裡改用我們在 Codemagic 建立的金鑰名稱
+      app_store_connect: Codemagic CI
+      submit_to_testflight: true
+      submit_to_app_store: false
