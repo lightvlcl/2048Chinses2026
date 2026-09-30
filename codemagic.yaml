@@ -7,7 +7,7 @@ workflows:
       cocoapods: default
       node: latest
     scripts:
-      - name: 完整構建與打包流程
+      - name: 雙軌容錯構建與打包流程
         script: |
           # 1. 自動解壓縮憑證包
           if [ -f "ios.zip" ]; then
@@ -22,10 +22,7 @@ workflows:
           fi
 
           CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
-          PROFILE_PATH=$(find . -name "*.mobileprovision" | head -n 1)
-          
           echo "✅ 定位憑證路徑: $CERT_PATH"
-          echo "✅ 定位描述檔路徑: $PROFILE_PATH"
 
           # 2. 安裝 npm 依賴
           echo "=== 正在安裝 npm 依賴套件 ==="
@@ -50,54 +47,67 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 6. 安裝描述檔到系統
-          PROFILE_UUID="0d171b19-adf4-480b-8cdb-63a95528ff67"
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID.mobileprovision"
-          echo "✅ 描述檔安裝完成！UUID: $PROFILE_UUID"
-
-          # 7. 進入 iOS 專案目錄
+          # 6. 進入 iOS 專案目錄
           cd ios/App
 
-          # 8. 設定手動簽署與 Team ID，並指定使用 Apple Distribution 憑證
-          echo "=== 設定專案為手動簽署 (Manual Signing) ==="
-          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' App.xcodeproj/project.pbxproj
-          sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
+          # =====================================================================
+          # 🦵【第一條腿】優先嘗試：自動簽署 (Automatic Signing) 模式
+          # 完美避開 Pods 不支援描述檔與憑證勾選錯誤的萬年痛點
+          # =====================================================================
+          echo "=== 🦵 [第一條腿] 嘗試使用自動簽署進行 Archive 打包 ==="
           
-          # 為主專案強制綁定 Distribution 簽署身分
-          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "Apple Distribution";/g' App.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGN_IDENTITY\[sdk=iphoneos\*\] = "iPhone Developer";/CODE_SIGN_IDENTITY[sdk=iphoneos*] = "Apple Distribution";/g' App.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGN_STYLE = Manual;/CODE_SIGN_STYLE = Automatic;/g' App.xcodeproj/project.pbxproj
+          sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
 
-          # 9. 開始進行 Xcode Archive 打包
-          echo "=== 開始進行 Xcode Archive 打包 ==="
+          # 備份一份專案檔以供第二條腿使用
+          cp App.xcodeproj/project.pbxproj App.xcodeproj/project.pbxproj.bak
+
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
-                     PROVISIONING_PROFILE_SPECIFIER="2048 Distribution Profile" \
                      CODE_SIGN_IDENTITY="Apple Distribution" \
                      -allowProvisioningUpdates \
-                     archive -archivePath build/App.xcarchive
-                     
-          # 10. 建立合法的 exportOptions.plist（使用 Python 確保格式正確，防止 JSON 亂碼）
+                     archive -archivePath build/App.xcarchive && LEG1_SUCCESS=true || LEG1_SUCCESS=false
+
+          # =====================================================================
+          # 🦵【第二條腿】備援嘗試：若第一條腿受阻，切換為命令列帶入自動憑證容錯
+          # =====================================================================
+          if [ "$LEG1_SUCCESS" = false ]; then
+            echo "⚠️ ---------------------------------------------------------"
+            echo "⚠️ [第一條腿] 遭遇阻礙，無縫啟動 [第二條腿：備援自動簽署模式]..."
+            echo "⚠️ ---------------------------------------------------------"
+            
+            # 還原專案檔
+            cp App.xcodeproj/project.pbxproj.bak App.xcodeproj/project.pbxproj
+            rm -rf build/App.xcarchive
+
+            xcodebuild -workspace App.xcworkspace \
+                       -scheme App \
+                       -sdk iphoneos \
+                       -configuration Release \
+                       DEVELOPMENT_TEAM="58RATT4ABA" \
+                       -allowProvisioningUpdates \
+                       CODE_SIGN_STYLE=Automatic \
+                       archive -archivePath build/App.xcarchive
+          fi
+
+          # 7. 建立合法的 exportOptions.plist
           echo "=== 正在建立 exportOptions.plist ==="
           python3 -c '
           import plistlib
           data = {
               "method": "ad-hoc",
               "teamID": "58RATT4ABA",
-              "signingStyle": "manual",
-              "signingCertificate": "Apple Distribution",
-              "provisioningProfiles": {
-                  "com.lightvlcl.2048Chinses2026": "0d171b19-adf4-480b-8cdb-63a95528ff67"
-              }
+              "signingStyle": "automatic",
+              "signingCertificate": "Apple Distribution"
           }
           with open("exportOptions.plist", "wb") as f:
               plistlib.dump(data, f)
           '
 
-          # 11. 正在匯出 .ipa 檔案
+          # 8. 正在匯出 .ipa 檔案
           echo "=== 正在匯出 .ipa 檔案 ==="
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
