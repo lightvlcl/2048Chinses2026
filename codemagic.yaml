@@ -1,62 +1,48 @@
-workflows:
-  ios-workflow:
-    name: 2048 iOS Release Workflow
-    max_build_duration: 120
-    instance_type: mac_mini_m2
-    environment:
-      vars:
-        BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
-        TEAM_ID: "58RATT4ABA"
-        APP_NAME: "App"
-    scripts:
-      - name: Install dependencies and sync Capacitor
-        script: |
-          npm install
-          if [ ! -d "ios" ]; then
-            npx cap add ios
-          fi
-          
-          # 安全注入 Pods 簽署繞過設定
-          node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27\n    end\n  end");fs.writeFileSync(p,c,"utf8");console.log("Injected signing bypass successfully");}'
-          
-          npx cap sync ios
+Fetch Signing Files & Build IPA
+< 1s
 
-      - name: Fetch Signing Files & Build IPA
-        script: |
-          set -e
-          mkdir -p build_output
 
-          # 1. 初始化金鑰環，準備存放憑證
-          codemagic initialize-keychain
 
-          # 2. 自動從 Developer Portal 抓取憑證與描述檔
-          app-store-connect fetch-signing-files \
-            --type IOS_APP_STORE \
-            com.lightvlcl.2048Chinses2026
+Hide command
+#!/usr/bin/env bash
 
-          # 3. 執行 Xcode Build (自動套用剛才抓到的憑證與描述檔)
-          xcodebuild -workspace ios/App/App.xcworkspace \
-            -scheme "App" \
-            -configuration Release \
-            -archivePath build_output/App.xcarchive \
-            archive \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="58RATT4ABA" \
-            PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
-            -allowProvisioningUpdates
+set -e
+mkdir -p build_output
 
-          # 4. 匯出 IPA
-          xcodebuild -exportArchive \
-            -archivePath build_output/App.xcarchive \
-            -exportPath build_output \
-            -exportOptionsPlist <(cat <<EOF
-          {
-            "method": "app-store",
-            "signingStyle": "automatic",
-            "teamID": "58RATT4ABA",
-            "stripSwiftSymbols": true
-          }
-          EOF
-          )
-    artifacts:
-      - build_output/*.ipa
+# 1. 初始化金鑰環，準備存放憑證
+codemagic initialize-keychain
+
+# 2. 自動從 Developer Portal 抓取憑證與描述檔
+app-store-connect fetch-signing-files \
+  --type IOS_APP_STORE \
+  com.lightvlcl.2048Chinses2026
+
+# 3. 執行 Xcode Build (自動套用剛才抓到的憑證與描述檔)
+xcodebuild -workspace ios/App/App.xcworkspace \
+  -scheme "App" \
+  -configuration Release \
+  -archivePath build_output/App.xcarchive \
+  archive \
+  CODE_SIGN_STYLE=Automatic \
+  DEVELOPMENT_TEAM="58RATT4ABA" \
+  PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
+  -allowProvisioningUpdates
+
+# 4. 匯出 IPA
+xcodebuild -exportArchive \
+  -archivePath build_output/App.xcarchive \
+  -exportPath build_output \
+  -exportOptionsPlist <(cat <<EOF
+{
+  "method": "app-store",
+  "signingStyle": "automatic",
+  "teamID": "58RATT4ABA",
+  "stripSwiftSymbols": true
+}
+EOF
+)
+/var/folders/w2/rrf5p87d1bbfyphxc7jdnyvh0000gn/T/build_script_3_1_moq95qq0: line 7: codemagic: command not found
+
+
+Build failed :|
+Step 3 script `Fetch Signing Files & Build IPA` exited with status code 127
