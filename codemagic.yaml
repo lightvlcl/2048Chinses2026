@@ -36,8 +36,7 @@ workflows:
           xcode-project build-ipa \
             --workspace "ios/App/App.xcworkspace" \
             --scheme "App"
-   publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        submit_to_app_store: false
+    publishing:
+      app_store_connect: app_store_connect
+      submit_to_testflight: true
+      submit_to_app_store: false
