@@ -31,10 +31,10 @@ workflows:
           set -e
           mkdir -p build_output
 
-          echo "=== [2/4] 初始化鑰匙圈與設定 API 連線 ==="
+          echo "=== [2/4] 初始化鑰匙圈與自動抓取現有憑證/描述檔 ==="
           keychain initialize
 
-          # 1. 安全寫入 .p8 API 私鑰檔案
+          # 1. 安全寫入 .p8 私鑰檔案
           PRIVATE_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
           mkdir -p "$(dirname "$PRIVATE_KEY_PATH")"
           cat << 'EOF' > "$PRIVATE_KEY_PATH"
@@ -46,37 +46,33 @@ workflows:
           -----END PRIVATE KEY-----
           EOF
 
-          # 2. 設定環境變數供 Codemagic CLI 使用
+          # 2. 設定環境變數
           export APP_STORE_CONNECT_ISSUER_ID="$ISSUER_ID"
           export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          # 3. 強制自動建立與下載簽署檔案（--create 會自動處理私鑰問題）
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          # 3. 直接抓取已存在的憑證與描述檔（不使用會衝突的 --create）
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE
 
           # 4. 將描述檔注入 Xcode 專案
           xcode-project use-profiles
 
-          echo "✅ 憑證與描述檔設定完成！"
+          echo "✅ 憑證與描述檔抓取並注入完成！"
 
       - name: Build IPA with Xcode
         script: |
           set -e
           echo "=== [3/4] 開始執行 Xcode Archive (手動簽署模式) ==="
           
-          PROFILE_UUID=$(xcode-project detect-provisioning-profile --bundle-id "$BUNDLE_ID" || true)
-          echo "偵測到的 Provisioning Profile UUID: $PROFILE_UUID"
-
           if ! xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
             -archivePath build_output/App.xcarchive \
             archive \
             CODE_SIGN_STYLE="Manual" \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            PROVISIONING_PROFILE="${PROFILE_UUID}"; then
+            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID"; then
             echo "❌ 【錯誤攔截】Xcode Archive 打包失敗！"
             exit 1
           fi
@@ -89,9 +85,6 @@ workflows:
           {
             "method": "app-store",
             "teamID": "$TEAM_ID",
-            "provisioningProfiles": {
-              "$BUNDLE_ID": "$PROFILE_UUID"
-            },
             "stripSwiftSymbols": true
           }
           EOF
