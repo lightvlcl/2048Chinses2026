@@ -9,6 +9,8 @@ workflows:
     environment:
       node: v22
       xcode: latest
+      groups:
+        - ios_keys     # <--- 加上這行，對應你在後台建的變數群組名稱
     scripts:
       - name: Install dependencies
         script: npm install
