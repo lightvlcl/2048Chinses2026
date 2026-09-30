@@ -8,13 +8,11 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         TEAM_ID: "58RATT4ABA"
         APP_NAME: "App"
-        KEY_ID: "ZDK96PR9X3"
-        ISSUER_ID: "0b40cc93-4f2b-435d-8ba3-e59e0221e1f0"
     scripts:
       - name: Install dependencies and sync Capacitor
         script: |
           set -e
-          echo "=== [1/4] 開始安裝專案依賴與同步 Capacitor ==="
+          echo "=== [1/3] 開始安裝專案依賴與同步 Capacitor ==="
           npm install
           
           if [ ! -d "ios" ]; then
@@ -26,58 +24,26 @@ workflows:
           npx cap sync ios
           echo "✅ 依賴安裝完成"
 
-      - name: Set up code signing via App Store Connect API (Diagnostic Mode)
+      - name: Set up code signing from Codemagic UI
         script: |
           set -e
           mkdir -p build_output
 
-          echo "=== [診斷 1/4] 初始化鑰匙圈 ==="
+          echo "=== [1/3] 初始化鑰匙圈 ==="
           keychain initialize
 
-          # 1. 安全寫入 .p8 私鑰檔案
-          PRIVATE_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
-          mkdir -p "$(dirname "$PRIVATE_KEY_PATH")"
-          cat << 'EOF' > "$PRIVATE_KEY_PATH"
-          -----BEGIN PRIVATE KEY-----
-          MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQguckiA9PXkv0mW5VD
-          wmdLVk+2QLqbsqpU51i0vgyiyuqgCgYIKoZIzj0DAQehRANCAAS03fXpwRNSsstE
-          88XhBvKc5vrp7v/nzjpgCNC75h4HITEqeiNOjD3IikAS1ALTnI72zFezYjRMgNU/
-          8WzhEPNH
-          -----END PRIVATE KEY-----
-          EOF
-
-          # 2. 設定環境變數
-          export APP_STORE_CONNECT_ISSUER_ID="$ISSUER_ID"
-          export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
-          export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
-
-          echo "=== [診斷 2/4] 檢查 API 連線與憑證環境 ==="
-          echo "目前使用的 Key ID: $KEY_ID"
-          echo "目標 Bundle ID: $BUNDLE_ID"
-
-          echo "=== [診斷 3/4] 嘗試建立並下載憑證 (強制開啟詳細除錯日誌) ==="
-          # 加上 --verbose 讓 app-store-connect 印出每一個 API 互動細節
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create \
-            --verbose || {
-              echo "❌ 攔截到 app-store-connect 失敗！"
-              echo "這通常代表以下其中一種情況："
-              echo "1. 該 API Key 不是 Admin 權限，無法在 Apple 後台執行建立憑證動作。"
-              echo "2. Apple 帳號的憑證上限或憑證類型發生衝突。"
-              exit 1
-            }
-
-          echo "=== [診斷 4/4] 將憑證加入鑰匙圈與注入描述檔 ==="
+          echo "=== [2/3] 將後台憑證與私鑰加入鑰匙圈 ==="
           keychain add-certificates
+
+          echo "=== [3/3] 注入描述檔到 Xcode 專案 ==="
           xcode-project use-profiles
 
-          echo "✅ 診斷與簽署設定完成！"
+          echo "✅ 憑證與鑰匙圈設定完成！"
 
       - name: Build IPA with Xcode
         script: |
           set -e
-          echo "=== [3/4] 開始執行 Xcode Archive (手動簽署模式) ==="
+          echo "=== [1/2] 開始執行 Xcode Archive (手動簽署模式) ==="
           
           if ! xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
@@ -91,7 +57,7 @@ workflows:
             exit 1
           fi
 
-          echo "=== [4/4] 正在匯出 IPA 檔案 ==="
+          echo "=== [2/2] 正在匯出 IPA 檔案 ==="
           if ! xcodebuild -exportArchive \
             -archivePath build_output/App.xcarchive \
             -exportPath build_output \
