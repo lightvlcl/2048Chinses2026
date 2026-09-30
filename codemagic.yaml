@@ -1,116 +1,123 @@
-workflows:
-  ios-release-workflow:
-    name: iOS Release Workflow
-    max_build_duration: 60
-    instance_type: mac_mini_m2
-    environment:
-      vars:
-        BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
-        TEAM_ID: "58RATT4ABA"
-    scripts:
-      - name: 穩健手動簽署打包流程
-        script: |
-          set -e
-          
-          # 1. 自動解壓縮憑證包
-          if [ -f "ios.zip" ]; then
-            echo "=== 正在解壓縮 ios.zip ==="
-            unzip -o ios.zip
-          fi
+#!/bin/bash
+set -e
 
-          # 修正雙重副檔名問題
-          if [ -f "ios/cert/distribution.p12.p12" ]; then
-            mv ios/cert/distribution.p12.p12 ios/cert/distribution.p12
-            echo "✅ 已將憑證重新命名為標準 distribution.p12"
-          fi
+echo "=== 1. 環境檢查與準備 ==="
+echo "Node version: $(node -v)"
+echo "NPM version: $(npm -v)"
+echo "Flutter/Ionic/Capacitor setup check..."
 
-          CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
-          PROFILE_PATH=$(find . -name "profile.mobileprovision" | head -n 1)
-          echo "✅ 定位憑證路徑: $CERT_PATH"
-          echo "✅ 定位描述檔路徑: $PROFILE_PATH"
+# 假設前面的安裝、依賴與憑證匯入（將 p12 放入鑰匙圈、描述檔放到 ~/Library/MobileDevice/Provisioning Profiles/）已經完成
+# 請確保你在此之前已經把環境變數 $PROVISIONING_PROFILE_UUID 和憑證準備好
 
-          # 2. 安裝 npm 依賴
-          echo "=== 正在安裝 npm 依賴套件 ==="
-          npm install
+# 2. 安裝專案相依套件與建置網頁端
+echo "=== 2. 安裝專案相依套件 ==="
+npm install
 
-          # 3. 初始化鑰匙圈並匯入 p12 憑證
-          keychain initialize
-          DEFAULT_KEYCHAIN=$(keychain get-default)
-          echo "=== 正在使用密碼匯入 p12 憑證到鑰匙圈 ==="
-          security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "snVWkEtR" -A -T /usr/bin/codesign
+echo "=== 3. 建置前端專案 (Build Web) ==="
+npm run build # 或對應你的打包指令，例如 ionic build
 
-          # 4. 安裝行動描述檔到系統指定目錄並取得 UUID
-          echo "=== 正在安裝行動描述檔 ==="
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          
-          PROVISIONING_PROFILE_UUID=$(python3 -c '
-          import plistlib, sys
-          try:
-              with open(sys.argv[1], "rb") as f:
-                  content = f.read()
-              start = content.index(b"<?xml")
-              end = content.rindex(b"</plist>") + len(b"</plist>")
-              plist_data = plistlib.loads(content[start:end])
-              print(plist_data["UUID"])
-          except Exception as e:
-              print(e, file=sys.stderr)
-              sys.exit(1)
-          ' "$PROFILE_PATH")
+# 4. 同步 Capacitor
+echo "=== 4. 同步 Capacitor iOS 專案 ==="
+npx cap sync ios
 
-          echo "🔑 成功取得描述檔 UUID: $PROVISIONING_PROFILE_UUID"
-          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
+# 5. 尋找與自動抓取描述檔 UUID（確保描述檔已經在步驟前被放到系統資料夾）
+echo "=== 5. 自動定位並讀取描述檔 UUID ==="
+PROVISION_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+# 抓取資料夾內最新的 .mobileprovision 檔案
+LATEST_PROFILE=$(ls -t "$PROVISION_DIR"/*.mobileprovision 2>/dev/null | head -n 1)
 
-          # 5. 同步 Capacitor iOS 專案
-          if [ ! -d "ios/App" ]; then
-            echo "=== 正在自動補齊 iOS 平台專案 ==="
-            npx cap add ios
-          fi
+if [ -z "$LATEST_PROFILE" ]; then
+    echo "❌ 錯誤：找不到任何描述檔 (.mobileprovision)，請確認前面的步驟是否有正確下載並放置！"
+    exit 1
+fi
 
-          npx cap sync ios
+echo "找到描述檔: $LATEST_PROFILE"
 
-          # 6. 自動修正 Info.plist 與專案檔內的 Bundle ID
-          echo "=== 正在全面修正 Bundle ID ==="
-          plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
-          find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
+# 利用 python 解析出 UUID
+PROVISIONING_PROFILE_UUID=$(python3 -c '
+import sys, plistlib, subprocess
+try:
+    # 透過 security cms 指令讀取描述檔的 plist 內容
+    out = subprocess.check_output(["security", "cms", "-D", "-i", sys.argv[1]])
+    data = plistlib.loads(out)
+    print(data.get("UUID"))
+except Exception as e:
+    print("", end="")
+' "$LATEST_PROFILE")
 
-          # 7. 進入 iOS 專案目錄並設定 Development Team
-          cd ios/App
-          echo "=== 正在設定 Development Team ==="
-          sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
+if [ -z "$PROVISIONING_PROFILE_UUID" ]; then
+    echo "❌ 錯誤：無法從描述檔中解析出 UUID！"
+    exit 1
+fi
 
-          # 8. 執行 Archive 打包（帶回 -allowProvisioningUpdates 允許自動更新描述檔）
-          echo "=== 開始進行 Archive 打包 ==="
-          xcodebuild -workspace App.xcworkspace \
-                     -scheme App \
-                     -sdk iphoneos \
-                     -configuration Release \
-                     DEVELOPMENT_TEAM="58RATT4ABA" \
-                     CODE_SIGN_STYLE="Automatic" \
-                     -allowProvisioningUpdates \
-                     archive -archivePath build/App.xcarchive
+echo "✅ 成功解析出描述檔 UUID: $PROVISIONING_PROFILE_UUID"
 
-          # 9. 建立合法的 exportOptions.plist
-          echo "=== 正在建立 exportOptions.plist ==="
-          python3 -c '
-          import plistlib, sys
-          data = {
-              "method": "ad-hoc",
-              "teamID": "58RATT4ABA",
-              "signingStyle": "automatic"
-          }
-          with open("exportOptions.plist", "wb") as f:
-              plistlib.dump(data, f)
-          '
+# 6. 進入 iOS 專案目錄並改為【手動簽署 Manual】，綁定 Team 與 UUID 描述檔
+cd ios/App
+echo "=== 6. 正在設定手動簽署與 Development Team ==="
 
-          # 10. 正在匯出 .ipa 檔案
-          echo "=== 正在匯出 .ipa 檔案 ==="
-          xcodebuild -exportArchive \
-                     -archivePath build/App.xcarchive \
-                     -exportOptionsPlist exportOptions.plist \
-                     -exportPath ../../build_output \
-                     -allowProvisioningUpdates
+# 強制將專案簽署風格改為 Manual（手動）
+find . -name "project.pbxproj" -exec sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' {} +
 
-          echo "🎉 打包流程大功告成！"
+# 設定 Development Team
+sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
 
-    artifacts:
-      - build_output/*.ipa
+find . -name "project.pbxproj" -exec sed -i '' 's/ProvisioningStyle = Automatic;/ProvisioningStyle = Manual;/g' {} +
+
+# 將確切的 UUID 寫入 project.pbxproj 的 Release 與 Debug 設定中
+python3 -c '
+import sys, re
+pbxproj_path = "App.xcodeproj/project.pbxproj"
+with open(pbxproj_path, "r") as f:
+    content = f.read()
+
+uuid = "'"$PROVISIONING_PROFILE_UUID"'"
+
+# 在 Release 區塊精準注入 PROVISIONING_PROFILE
+content = re.sub(
+    r"(CODE_SIGN_IDENTITY = \"iPhone Distribution\";)(?![\s\S]*PROVISIONING_PROFILE)",
+    r"\1\n					PROVISIONING_PROFILE = \"" + uuid + r"\";",
+    content
+)
+
+with open(pbxproj_path, "w") as f:
+    f.write(content)
+print("✅ 成功將描述檔 UUID 寫入 Xcode 專案設定")
+'
+
+# 7. 執行 Archive 打包（使用 Manual Signing，完全不需連線 Apple 帳號）
+echo "=== 7. 開始進行 Archive 打包 (Manual Signing) ==="
+xcodebuild -workspace App.xcworkspace \
+           -scheme App \
+           -sdk iphoneos \
+           -configuration Release \
+           DEVELOPMENT_TEAM="58RATT4ABA" \
+           CODE_SIGN_STYLE="Manual" \
+           PROVISIONING_PROFILE="$PROVISIONING_PROFILE_UUID" \
+           archive -archivePath build/App.xcarchive
+
+# 8. 建立合法的 exportOptions.plist（手動模式）
+echo "=== 8. 正在建立 exportOptions.plist ==="
+python3 -c '
+import plistlib
+data = {
+    "method": "ad-hoc",
+    "teamID": "58RATT4ABA",
+    "signingStyle": "manual",
+    "provisioningProfiles": {
+        "com.lightvlcl.2048Chinses2026": "'"$PROVISIONING_PROFILE_UUID"'"
+    }
+}
+with open("exportOptions.plist", "wb") as f:
+    plistlib.dump(data, f)
+'
+
+# 9. 匯出 .ipa 檔案
+echo "=== 9. 正在匯出 .ipa 檔案 ==="
+mkdir -p ../../build_output
+xcodebuild -exportArchive \
+           -archivePath build/App.xcarchive \
+           -exportOptionsPlist exportOptions.plist \
+           -exportPath ../../build_output
+
+echo "🎉 打包流程全部完成！IPA 檔案應已輸出至 build_output 目錄。"
