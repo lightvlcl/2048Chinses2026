@@ -1,98 +1,37 @@
-workflows:
-  ios-workflow:
-    name: 2048 iOS Release Workflow
-    max_build_duration: 120
-    instance_type: mac_mini_m2
-    environment:
-      vars:
-        BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
-        TEAM_ID: "58RATT4ABA"
-        APP_NAME: "App"
-        KEY_ID: "ZDK96PR9X3"
-        ISSUER_ID: "0b40cc93-4f2b-435d-8ba3-e59e0221e1f0"
-    scripts:
-      - name: Install dependencies and sync Capacitor
-        script: |
-          set -e
-          echo "=== [1/4] 開始安裝專案依賴與同步 Capacitor ==="
-          npm install
-          
-          if [ ! -d "ios" ]; then
-            npx cap add ios
-          fi
-          
-          node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |target_config|\n      target_config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27;\n    end;\n  end;");fs.writeFileSync(p,c,"utf8");}' || true
-          
-          npx cap sync ios
-          echo "✅ 依賴安裝完成"
+- name: Set up code signing via App Store Connect API
+      script: |
+        set -e
+        mkdir -p build_output
 
-      - name: Set up code signing via App Store Connect API
-        script: |
-          set -e
-          mkdir -p build_output
+        echo "=== [1/4] 初始化鑰匙圈 ==="
+        keychain initialize
 
-          echo "=== [2/4] 初始化鑰匙圈與自動抓取現有憑證/描述檔 ==="
-          keychain initialize
+        # 1. 安全寫入 .p8 私鑰檔案
+        PRIVATE_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
+        mkdir -p "$(dirname "$PRIVATE_KEY_PATH")"
+        cat << 'EOF' > "$PRIVATE_KEY_PATH"
+        -----BEGIN PRIVATE KEY-----
+        MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQguckiA9PXkv0mW5VD
+        wmdLVk+2QLqbsqpU51i0vgyiyuqgCgYIKoZIzj0DAQehRANCAAS03fXpwRNSsstE
+        88XhBvKc5vrp7v/nzjpgCNC75h4HITEqeiNOjD3IikAS1ALTnI72zFezYjRMgNU/
+        8WzhEPNH
+        -----END PRIVATE KEY-----
+        EOF
 
-          # 1. 安全寫入 .p8 私鑰檔案
-          PRIVATE_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_$KEY_ID.p8"
-          mkdir -p "$(dirname "$PRIVATE_KEY_PATH")"
-          cat << 'EOF' > "$PRIVATE_KEY_PATH"
-          -----BEGIN PRIVATE KEY-----
-          MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQguckiA9PXkv0mW5VD
-          wmdLVk+2QLqbsqpU51i0vgyiyuqgCgYIKoZIzj0DAQehRANCAAS03fXpwRNSsstE
-          88XhBvKc5vrp7v/nzjpgCNC75h4HITEqeiNOjD3IikAS1ALTnI72zFezYjRMgNU/
-          8WzhEPNH
-          -----END PRIVATE KEY-----
-          EOF
+        # 2. 設定環境變數
+        export APP_STORE_CONNECT_ISSUER_ID="$ISSUER_ID"
+        export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
+        export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          # 2. 設定環境變數
-          export APP_STORE_CONNECT_ISSUER_ID="$ISSUER_ID"
-          export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
-          export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
+        echo "=== [2/4] 現場建立並下載全新憑證與描述檔 ==="
+        app-store-connect fetch-signing-files "$BUNDLE_ID" \
+          --type IOS_APP_STORE \
+          --create
 
-          # 3. 直接抓取已存在的憑證與描述檔（不使用會衝突的 --create）
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE
+        echo "=== [3/4] 將新憑證與私鑰加入鑰匙圈 ==="
+        keychain add-certificates
 
-          # 4. 將描述檔注入 Xcode 專案
-          xcode-project use-profiles
+        echo "=== [4/4] 注入描述檔到 Xcode 專案 ==="
+        xcode-project use-profiles
 
-          echo "✅ 憑證與描述檔抓取並注入完成！"
-
-      - name: Build IPA with Xcode
-        script: |
-          set -e
-          echo "=== [3/4] 開始執行 Xcode Archive (手動簽署模式) ==="
-          
-          if ! xcodebuild -workspace ios/App/App.xcworkspace \
-            -scheme "App" \
-            -configuration Release \
-            -archivePath build_output/App.xcarchive \
-            archive \
-            CODE_SIGN_STYLE="Manual" \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID"; then
-            echo "❌ 【錯誤攔截】Xcode Archive 打包失敗！"
-            exit 1
-          fi
-
-          echo "=== [4/4] 正在匯出 IPA 檔案 ==="
-          if ! xcodebuild -exportArchive \
-            -archivePath build_output/App.xcarchive \
-            -exportPath build_output \
-            -exportOptionsPlist <(cat <<EOF
-          {
-            "method": "app-store",
-            "teamID": "$TEAM_ID",
-            "stripSwiftSymbols": true
-          }
-          EOF
-          ); then
-            echo "❌ 【錯誤攔截】匯出 IPA 失敗！"
-            exit 1
-          fi
-
-          echo "🎉 恭喜！IPA 封裝與匯出完全成功！"
-    artifacts:
-      - build_output/*.ipa
+        echo "✅ 憑證與私鑰設定完成！"
