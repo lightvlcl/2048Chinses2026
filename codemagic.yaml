@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 自動簽署版 —— iOS 專用
+# Codemagic 自動簽署修正版 —— iOS 專用
 # ============================================================
 workflows:
   ios-release:
@@ -30,9 +30,9 @@ workflows:
           fi
       - name: Initialize code signing settings
         script: |
-          # 讓 Codemagic 自動透過 API 抓取或建立憑證與描述檔
-          app-store-connect fetch-signing-files "$bundle_identifier" \
-            --type "$distribution_type" \
+          app-store-connect fetch-signing-files "com.lightvlcl.game2048" \
+            --type "app_store" \
+            --integration "APPLE API 1" \
             --create
       - name: Set up code signing
         script: xcode-project use-profiles
@@ -43,11 +43,9 @@ workflows:
             --workspace "ios/App/App.xcworkspace" \
             --scheme "App"
     
-    # 關鍵：在 workflow 內宣告整合，對應後台金鑰名稱
     integrations:
       app_store_connect: APPLE API 1
 
-    # 關鍵：正確的巢狀發布結構
     publishing:
       app_store_connect:
         auth: integration
