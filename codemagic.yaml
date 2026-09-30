@@ -4,6 +4,8 @@ workflows:
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
+      groups:
+        - ios_keys   # ⬅️ 這裡會自動引入你在後台設定的變數（包含 Issuer ID, Key ID, Private Key）
       vars:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         TEAM_ID: "58RATT4ABA"
@@ -26,7 +28,7 @@ workflows:
           # 1. 初始化鑰匙圈
           keychain initialize
 
-          # 2. 透過 API 取得憑證與描述檔
+          # 2. 透過 API 自動從 Apple Developer 抓取憑證與描述檔
           app-store-connect fetch-signing-files --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" --type IOS_APP_STORE "$BUNDLE_ID" || true
 
           # 3. 執行 Xcode Build
