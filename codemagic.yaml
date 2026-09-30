@@ -60,12 +60,13 @@ workflows:
           # 7. 進入 iOS 專案目錄
           cd ios/App
           
-          # 8. 開始進行 xcodebuild 手動簽署與打包
+          # 8. 開始進行 xcodebuild 手動簽署與打包（加入 Team ID）
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
                      CODE_SIGN_STYLE=Manual \
+                     DEVELOPMENT_TEAM="58RATT4ABA" \
                      PROVISIONING_PROFILE="$PROFILE_UUID" \
                      PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
                      archive -archivePath build/App.xcarchive
