@@ -32,11 +32,11 @@ workflows:
           echo "=== 正在安裝 npm 依賴套件 ==="
           npm install
 
-          # 3. 初始化鑰匙圈並匯入憑證（帶入 Codemagic 提供的專屬密碼）
+          # 3. 初始化鑰匙圈並匯入憑證（修正為正確的 --password 參數）
           keychain initialize
           
           echo "=== 正在匯入 p12 憑證到鑰匙圈 ==="
-          keychain add-certificates --certificate "$CERT_PATH" --passphrase "snVWkEtR"
+          keychain add-certificates --certificate "$CERT_PATH" --password "snVWkEtR"
 
           # 4. 安裝 mobileprovision 描述檔到系統目錄
           PROFILE_UUID=$(grep -a -A 1 -E "<key>UUID</key>" "$PROFILE_PATH" | tail -n 1 | sed -e 's/<string>//g' -e 's/<\/string>//g' | tr -d '[:space:]')
@@ -56,22 +56,21 @@ workflows:
           echo "=== 修正主專案 Bundle ID ==="
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
 
-          # 7. 進入 iOS 專案目錄並打包（針對主 Target App 套用簽署，避免 Pods 報錯）
+          # 7. 進入 iOS 專案目錄，使用 Codemagic 內建工具自動配置簽署（完美避開 Pods 錯誤）
           cd ios/App
           
+          echo "=== 自動套用專案簽署設定 ==="
+          xcode-project use-profiles
+
+          # 8. 開始進行 Xcode Archive 打包
           echo "=== 開始進行 Xcode Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
-                     CODE_SIGN_STYLE=Manual \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     DEVELOPMENT_TEAM="58RATT4ABA" \
-                     PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
-                     PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
                      archive -archivePath build/App.xcarchive
                      
-          # 8. 建立 exportOptions.plist 並匯出 .ipa 檔案
+          # 9. 建立 exportOptions.plist 並匯出 .ipa 檔案
           echo "=== 正在建立 exportOptions.plist ==="
           cat <<EOF > exportOptions.plist
           {
