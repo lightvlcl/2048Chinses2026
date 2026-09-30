@@ -78,7 +78,7 @@ workflows:
           echo "=== 正在設定 Development Team ==="
           sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
 
-          # 8. 執行 Archive 打包（使用 Automatic 簽署，讓 Xcode 自動匹配鑰匙圈內的憑證）
+          # 8. 執行 Archive 打包（帶回 -allowProvisioningUpdates 允許自動更新描述檔）
           echo "=== 開始進行 Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
@@ -86,6 +86,7 @@ workflows:
                      -configuration Release \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_STYLE="Automatic" \
+                     -allowProvisioningUpdates \
                      archive -archivePath build/App.xcarchive
 
           # 9. 建立合法的 exportOptions.plist
@@ -106,7 +107,8 @@ workflows:
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist exportOptions.plist \
-                     -exportPath ../../build_output
+                     -exportPath ../../build_output \
+                     -allowProvisioningUpdates
 
           echo "🎉 打包流程大功告成！"
 
