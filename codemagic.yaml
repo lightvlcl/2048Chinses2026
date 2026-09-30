@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 自動簽署最終對應版 —— iOS 專用
+# Codemagic 終極免名稱對應版 —— iOS 專用
 # ============================================================
 workflows:
   ios-release:
@@ -33,12 +33,12 @@ workflows:
           xcode-project build-ipa \
             --workspace "ios/App/App.xcworkspace" \
             --scheme "App"
-    
-    integrations:
-      app_store_connect: APPLE API 1
 
     publishing:
       app_store_connect:
-        auth: integration
+        auth: api_key
+        issuer_id: 0b40cc93-4f2b-435d-8ba3-e59e0221e1f0
+        key_id: ZDK96PR9X3
+        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
         submit_to_testflight: true
         submit_to_app_store: false
