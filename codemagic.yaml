@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 純原生指令打包版 —— iOS 專用 (最終完美版)
+# Codemagic 最終精簡版 —— 移除冗餘憑證指令，直接原生打包
 # ============================================================
 workflows:
   ios-release:
@@ -30,8 +30,6 @@ workflows:
           if [ -f "$ICON_DIR/AppIcon-512.png" ]; then
             cp resources/icon-1024.png "$ICON_DIR/AppIcon-512.png"
           fi
-      - name: Set up code signing
-        script: app-store-connect fetch-signing-files com.lightvlcl.2048Chinses2026 --issuer "$APP_STORE_CONNECT_ISSUER_ID" --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" --create
       - name: Build and Export IPA
         script: |
           set -e
