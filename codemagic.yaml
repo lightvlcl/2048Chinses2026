@@ -1,11 +1,6 @@
 # ============================================================
 # Codemagic 云构建配置 —— iOS 签名打包 + 上传 App Store Connect
 # ============================================================
-
-# 1. 在最頂端宣告整合名稱，對應你在後台的設定
-integrations:
-  app_store_connect: APPLE API 1
-
 workflows:
   ios-release:
     name: 2048 iOS Release
@@ -41,6 +36,8 @@ workflows:
           xcode-project build-ipa \
             --workspace "ios/App/App.xcworkspace" \
             --scheme "App"
+    integrations:
+      app_store_connect: APPLE API 1
     publishing:
       app_store_connect:
         auth: integration
