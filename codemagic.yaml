@@ -29,7 +29,6 @@ workflows:
         script: |
           app-store-connect fetch-signing-files "com.lightvlcl.game2048" \
             --type "app_store" \
-            --integration "app_store_connect" \
             --create
       - name: Set up code signing
         script: xcode-project use-profiles
