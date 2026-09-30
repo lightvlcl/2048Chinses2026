@@ -22,7 +22,7 @@ workflows:
 
       - name: Set up code signing profiles
         script: |
-          # 這行指令會自動把你在 Codemagic 帳戶上傳且符合 Bundle ID 的描述檔安裝到專案中
+          # 關鍵：這行指令會把你在 Codemagic 帳戶上傳的描述檔自動安裝到編譯環境中
           xcode-project use-profiles
 
       - name: Build and Export IPA
