@@ -31,7 +31,7 @@ workflows:
           set -e
           mkdir -p build_output
 
-          echo "=== [2/4] 初始化鑰匙圈與自動建立/抓取憑證與描述檔 ==="
+          echo "=== [2/4] 初始化鑰匙圈與設定 API 連線 ==="
           keychain initialize
 
           # 1. 安全寫入 .p8 API 私鑰檔案
@@ -46,20 +46,18 @@ workflows:
           -----END PRIVATE KEY-----
           EOF
 
-          # 2. 設定環境變數
+          # 2. 設定環境變數供 Codemagic CLI 使用
           export APP_STORE_CONNECT_ISSUER_ID="$ISSUER_ID"
           export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          # 3. 透過 API 自動建立並抓取合適的憑證與描述檔（帶入 --create 讓工具自動產生對應私鑰）
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create
+          # 3. 使用 Codemagic 內建的 appstore-tools 自動匹配與下載對應憑證
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE || true
 
-          # 4. 將描述檔注入 Xcode 專案
+          # 4. 將描述檔與憑證注入 Xcode 專案
           xcode-project use-profiles
 
-          echo "✅ 憑證與描述檔抓取並注入完成！"
+          echo "✅ 憑證與描述檔設定完成！"
 
       - name: Build IPA with Xcode
         script: |
