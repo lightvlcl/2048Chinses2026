@@ -8,6 +8,10 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         APP_NAME: "App"
     scripts:
+      - name: Install dependencies and sync Capacitor
+        script: |
+          npm install
+          npx cap sync ios
       - name: Build and Export IPA
         script: |
           set -e
