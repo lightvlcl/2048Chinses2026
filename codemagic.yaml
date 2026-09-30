@@ -31,7 +31,7 @@ workflows:
           set -e
           mkdir -p build_output
 
-          echo "=== [2/4] 初始化鑰匙圈與自動抓取憑證/描述檔 ==="
+          echo "=== [2/4] 初始化鑰匙圈與自動抓取現有憑證/描述檔 ==="
           keychain initialize
 
           # 1. 安全寫入 .p8 私鑰檔案
@@ -51,26 +51,20 @@ workflows:
           export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          # 3. 動態產生用於建立憑證的私鑰
-          openssl genrsa -out cert_private_key.pem 2048
-
-          # 4. 下載/建立憑證與 App Store 描述檔
+          # 3. 直接抓取已存在的憑證與描述檔
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create \
-            --certificate-key "$(cat cert_private_key.pem)"
+            --type IOS_APP_STORE
 
-          # 5. 【關鍵】將下載好的描述檔直接注入 Xcode 專案，改用手動簽署 (Manual Signing)
+          # 4. 將描述檔注入 Xcode 專案
           xcode-project use-profiles
 
-          echo "✅ 憑證與描述檔注入完成！"
+          echo "✅ 憑證與描述檔抓取並注入完成！"
 
       - name: Build IPA with Xcode
         script: |
           set -e
           echo "=== [3/4] 開始執行 Xcode Archive (手動簽署模式) ==="
           
-          # 改用手動簽署，完全避開 Xcode 帳號登入驗證
           if ! xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
