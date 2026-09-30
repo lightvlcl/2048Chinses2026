@@ -8,9 +8,9 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         TEAM_ID: "58RATT4ABA"
         APP_NAME: "App"
-      # 如果你在 Codemagic 環境變數中設定了 App Store Connect API，可以透過以下方式引用（選填，若沒設可先忽略）
-      # groups:
-      #   - appstore_credentials
+      # 指定使用你在 Codemagic 後台連結的 Developer Portal 整合
+      # Codemagic 會自動透過這組 Key 進行簽署
+      # 如果你的整合名稱有設定，可以透過底下設定對應，若無則預設會自動抓取
     scripts:
       - name: Install dependencies and sync Capacitor
         script: |
@@ -24,7 +24,7 @@ workflows:
           
           npx cap sync ios
 
-      - name: Initialize Code Signing & Build IPA
+      - name: Automatic Code Signing & Build IPA
         script: |
           set -e
           mkdir -p build_output
@@ -32,30 +32,29 @@ workflows:
           # 智慧診斷攔截器
           trap '
             echo "========================================="
-            echo "🔍 [即時智慧診斷報告 - 建置與簽署失敗]"
+            echo "🔍 [即時智慧診斷報告 - 自動簽署建置失敗]"
             echo "========================================="
-            echo "【金鑰環內可用憑證清單】"
+            echo "【金鑰環內可用憑證】"
             security find-identity -v -p codesigning || true
-            echo ""
-            echo "【系統中的描述檔】"
-            ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || echo "無描述檔"
             echo "========================================="
           ' ERR
 
-          # 初始化 Codemagic 憑證工具（如果已在後台設定憑證/API）
-          # 如果你有在 Codemagic UI 設定 Code Signing，這行指令會自動把憑證和描述檔安裝到雲端 Mac 裡
-          app-store-connect fetch-signing-files --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" --bundle-id "$BUNDLE_ID" --type APP_STORE || true
+          # 利用 Codemagic app-store-connect 工具自動從剛才綠燈的 Developer Portal 抓取對應的憑證與描述檔
+          # 這裡會自動使用你在 Integrations 綁定的 Key
+          app-store-connect fetch-signing-files \
+            --bundle-id "$BUNDLE_ID" \
+            --type IOS_APP_STORE || true
 
-          # 執行帶有手動簽署的 Xcode Build
+          # 執行 Xcode Build (切回 Automatic 讓已抓取的憑證自動生效)
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
             -archivePath build_output/App.xcarchive \
             archive \
-            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="58RATT4ABA" \
             PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
-            CODE_SIGN_IDENTITY="Apple Distribution"
+            -allowProvisioningUpdates
 
           xcodebuild -exportArchive \
             -archivePath build_output/App.xcarchive \
@@ -63,7 +62,7 @@ workflows:
             -exportOptionsPlist <(cat <<EOF
           {
             "method": "app-store",
-            "signingStyle": "manual",
+            "signingStyle": "automatic",
             "teamID": "58RATT4ABA",
             "stripSwiftSymbols": true
           }
