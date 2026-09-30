@@ -15,24 +15,9 @@ workflows:
             npx cap add ios
           fi
           
-          # 用乾淨的 Node.js 寫法直接插入真實換行，不留跳脫字元
-          node -e '
-            const fs = require("fs");
-            let p = "ios/App/Podfile";
-            let content = fs.readFileSync(p, "utf8");
-            if (!content.includes("CODE_SIGNING_ALLOWED")) {
-              const snippet = `post_install do |installer|
-  installer.pods_project.targets.each do |target|
-    target.build_configurations.each do |config|
-      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27
-    end
-  end`;
-              content = content.replace("post_install do |installer|", snippet);
-              fs.writeFileSync(p, content, "utf8");
-              console.log("Successfully injected signing bypass into Podfile");
-            }
-          '
-
+          # 用絕對安全的單行 Node.js 指令注入 Podfile，徹底避開 YAML 縮排地獄
+          node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27\n    end\n  end");fs.writeFileSync(p,c,"utf8");console.log("Injected signing bypass successfully");}'
+          
           npx cap sync ios
 
       - name: Build and Export IPA
