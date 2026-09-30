@@ -3,13 +3,11 @@ workflows:
     name: iOS Release Workflow
     max_build_duration: 60
     environment:
-      # 直接使用我們手動放好的憑證與描述檔路徑
       xcode: latest
       cocoapods: default
     scripts:
       - name: 檢查並安裝相依套件
         script: |
-          # 視你的專案需求而定，若是 Flutter / React Native / Capacitor 可在此安裝
           npm install
           
       - name: 初始化鑰匙圈並手動安裝憑證
@@ -27,7 +25,6 @@ workflows:
           
           # 4. 手動安裝 mobileprovision 描述檔
           echo "=== 正在安裝 mobileprovision 描述檔 ==="
-          # 自動從描述檔中抓取 UUID
           PROFILE_UUID=$(grep -a -A 1 -E "<key>UUID</key>" "$PROFILE_PATH" | tail -n 1 | sed -e 's/<string>//g' -e 's/<\/string>//g' | tr -d '[:space:]')
           
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
@@ -37,19 +34,20 @@ workflows:
 
       - name: Build IPA with Xcode
         script: |
-          # 進行 Xcode 的打包與建置
-          # 請根據你的專案專案類型（Flutter / Ionic / Capacitor / Native iOS）調整打包指令
-          # 以 Capacitor / React Native 為例：
-          npx cap build ios --prod --ios-target Device
+          # 1. 同步 Capacitor iOS 專案結構（自動生成 ios/App 資料夾）
+          npx cap sync ios
           
+          # 2. 進入 iOS 專案目錄
           cd ios/App
-          # 開始進行 xcodebuild 打包
+          
+          # 3. 開始進行 xcodebuild 打包
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
                      archive -archivePath build/App.xcarchive
                      
+          # 4. 匯出 .ipa 檔案
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist exportOptions.plist \
