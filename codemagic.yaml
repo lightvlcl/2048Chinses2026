@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 純原生指令打包版 —— iOS 專用 (修正指令版)
+# Codemagic 純原生指令打包版 —— iOS 專用 (最終修正版)
 # ============================================================
 workflows:
   ios-release:
@@ -32,7 +32,10 @@ workflows:
           fi
       - name: Set up code signing
         script: |
-          app-store-connect fetch-signing-files \
+          BUNDLE_ID=$(node -p "require('./capacitor.config.json').appId")
+          echo "Using Bundle ID: $BUNDLE_ID"
+          
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
