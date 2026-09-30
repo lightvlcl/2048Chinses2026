@@ -18,33 +18,42 @@ workflows:
           node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27;\n    end;\n  end;");fs.writeFileSync(p,c,"utf8");}' || true
           npx cap sync ios
 
-      - name: Build and Export IPA
+      - name: Set up code signing and build IPA
         script: |
           set -e
           mkdir -p build_output
 
-          # 讓 Codemagic 自動將後台的憑證與描述檔注入專案
-          xcode-project use-profiles
+          # 1. 初始化鑰匙圈
+          keychain initialize
 
-          # 執行 Xcode Build
+          # 2. 透過 API 取得憑證與描述檔
+          app-store-connect fetch-signing-files --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" --type IOS_APP_STORE "$BUNDLE_ID" || true
+
+          # 3. 執行 Xcode Build
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
             -archivePath build_output/App.xcarchive \
             archive \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="Game2048Profile" \
             DEVELOPMENT_TEAM="58RATT4ABA" \
             PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026" \
             -allowProvisioningUpdates
 
+          # 4. 匯出 IPA
           xcodebuild -exportArchive \
             -archivePath build_output/App.xcarchive \
             -exportPath build_output \
             -exportOptionsPlist <(cat <<EOF
           {
             "method": "app-store",
-            "signingStyle": "automatic",
+            "signingStyle": "manual",
             "teamID": "58RATT4ABA",
+            "provisioningProfiles": {
+              "$BUNDLE_ID": "Game2048Profile"
+            },
             "stripSwiftSymbols": true
           }
           EOF
