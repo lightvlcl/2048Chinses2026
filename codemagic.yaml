@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 最終無整合依賴版 —— iOS 專用
+# Codemagic 命令列直接發布版 —— iOS 專用
 # ============================================================
 workflows:
   ios-release:
@@ -12,7 +12,7 @@ workflows:
       groups:
         - ios_keys
       vars:
-        APP_ STORE_CONNECT_ISSUER_ID: "0b40cc93-4f2b-435d-8ba3-e59e0221e1f0"
+        APP_STORE_CONNECT_ISSUER_ID: "0b40cc93-4f2b-435d-8ba3-e59e0221e1f0"
         APP_STORE_CONNECT_KEY_IDENTIFIER: "ZDK96PR9X3"
     scripts:
       - name: Install dependencies
@@ -38,12 +38,7 @@ workflows:
           xcode-project build-ipa \
             --workspace "ios/App/App.xcworkspace" \
             --scheme "App"
-
-    publishing:
-      app_store_connect:
-        auth: api_key
-        issuer_id: 0b40cc93-4f2b-435d-8ba3-e59e0221e1f0
-        key_id: ZDK96PR9X3
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        submit_to_testflight: true
-        submit_to_app_store: false
+      - name: Publish to TestFlight
+        script: |
+          app-store-connect publish \
+            --path "$(find $(pwd) -name "*.ipa")"
