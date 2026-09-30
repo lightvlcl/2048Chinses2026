@@ -92,7 +92,7 @@
               f.write(pods_content)
           print("✅ 成功更新主專案與 Pods 簽署設定")
       except Exception as e:
-          print("⚠️ Pods 專案調整略過:", e)
+          print("⚠️️ Pods 專案調整略過:", e)
       '
 
       # 8. 執行 Archive 打包（精準帶入 Provisioning Profile UUID）
