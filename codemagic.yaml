@@ -35,10 +35,7 @@ workflows:
           # 3. 初始化鑰匙圈，並使用 macOS 原生 security 指令帶入密碼匯入 p12 憑證
           keychain initialize
           
-          # 取得當前預設鑰匙圈路徑
           DEFAULT_KEYCHAIN=$(keychain get-default)
-          echo "✅ 當前鑰匙圈路徑: $DEFAULT_KEYCHAIN"
-
           echo "=== 正在使用密碼匯入 p12 憑證到鑰匙圈 ==="
           security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "snVWkEtR" -A -T /usr/bin/codesign
 
@@ -56,23 +53,23 @@ workflows:
           
           npx cap sync ios
           
-          # 6. 自動修正專案 Bundle ID
-          echo "=== 修正主專案 Bundle ID ==="
+          # 6. 自動修正 Info.plist 與專案檔內的 Bundle ID 為正確的名稱
+          echo "=== 正在全面修正 Bundle ID ==="
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
+          
+          # 使用 sed 將專案檔內的舊 Bundle ID 整個取代掉，避免 App ID 不匹配報錯
+          find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
           # 7. 進入 iOS 專案目錄並打包
           cd ios/App
 
-          # 8. 開始進行 Xcode Archive 打包（強制帶入 Team 與手動簽署設定）
+          # 8. 開始進行 Xcode Archive 打包（移除全域的簽署參數，改由 Xcode 專案自身設定抓取，避免 Pods 報錯）
           echo "=== 開始進行 Xcode Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
-                     CODE_SIGN_STYLE="Manual" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
                      archive -archivePath build/App.xcarchive
                      
           # 9. 建立 exportOptions.plist 並匯出 .ipa 檔案
@@ -81,8 +78,7 @@ workflows:
           {
             "method": "ad-hoc",
             "teamID": "58RATT4ABA",
-            "signingStyle": "manual",
-            "signingCertificate": "Apple Distribution",
+            "signingStyle": "automatic",
             "provisioningProfiles": {
               "com.lightvlcl.2048Chinses2026": "$PROFILE_UUID"
             }
