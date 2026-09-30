@@ -20,7 +20,7 @@ workflows:
             npx cap add ios
           fi
           
-          node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27;\n    end;\n  end;");fs.writeFileSync(p,c,"utf8");}' || true
+          node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |target_config|\n      target_config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27;\n    end;\n  end;");fs.writeFileSync(p,c,"utf8");}' || true
           
           npx cap sync ios
           echo "✅ 依賴安裝完成"
@@ -30,16 +30,16 @@ workflows:
           set -e
           mkdir -p build_output
 
-          echo "=== [2/4] 初始化鑰匙圈與全方位安裝憑證/描述檔 ==="
+          echo "=== [2/4] 初始化鑰匙圈與安裝憑證/描述檔 ==="
           keychain initialize
 
-          # 1. 建立所有可能的 Xcode 描述檔存放路徑
+          # 1. 建立 Xcode 描述檔存放路徑
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           USER_DATA_PROFILE_DIR="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
           mkdir -p "$PROFILE_DIR"
           mkdir -p "$USER_DATA_PROFILE_DIR"
 
-          # 2. 寫入描述檔 (使用正確的 UUID: 0d171b19-adf4-480b-8cdb-63a95528ff67)
+          # 2. 寫入描述檔
           PROFILE_CONTENT='<?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -80,20 +80,21 @@ workflows:
           echo "$PROFILE_CONTENT" > "$PROFILE_DIR/0d171b19-adf4-480b-8cdb-63a95528ff67.mobileprovision"
           echo "$PROFILE_CONTENT" > "$USER_DATA_PROFILE_DIR/0d171b19-adf4-480b-8cdb-63a95528ff67.mobileprovision"
 
-          # 3. 寫入 App Store Connect API 私鑰 (.p8)
-          mkdir -p ~/.appstoreconnect/private_keys
-          cat << 'EOF' > ~/.appstoreconnect/private_keys/AuthKey_ZDK96PR9X3.p8
------BEGIN PRIVATE KEY-----
-MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQguckiA9PXkv0mW5VD
-wmdLVk+2QLqbsqpU51i0vgyiyuqgCgYIKoZIzj0DAQehRANCAAS03fXpwRNSsstE
-88XhBvKc5vrp7v/nzjpgCNC75h4HITEqeiNOjD3IikAS1ALTnI72zFezYjRMgNU/
-8WzhEPNH
------END PRIVATE KEY-----
-EOF
+          # 3. 使用 Python 安全寫入 .p8 金鑰，避開 YAML 減號衝突
+          python3 -c '
+          import os
+          path = os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_ZDK96PR9X3.p8")
+          os.makedirs(os.path.dirname(path), exist_ok=True)
+          with open(path, "w") as f:
+              f.write("-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQguckiA9PXkv0mW5VD\nwmdLVk+2QLqbsqpU51i0vgyiyuqgCgYIKoZIzj0DAQehRANCAAS03fXpwRNSsstE\n88XhBvKc5vrp7v/nzjpgCNC75h4HITEqeiNOjD3IikAS1ALTnI72zFezYjRMgNU/\n8WzhEPNH\n-----END PRIVATE KEY-----\n")
+          '
 
           echo "ℹ️ 目前系統中可用的憑證清單："
           security find-identity -v -p codesigning || true
 
+      - name: Build IPA with Xcode
+        script: |
+          set -e
           echo "=== [3/4] 開始執行 Xcode Archive ==="
           if ! xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
