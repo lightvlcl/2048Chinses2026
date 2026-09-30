@@ -5,13 +5,17 @@ workflows:
     environment:
       xcode: latest
       cocoapods: default
+      node: latest
     scripts:
-      - name: 檢查並解壓縮憑證與專案
+      - name: 1. 解壓縮憑證與安裝依賴
         script: |
           if [ -f "ios.zip" ]; then
             echo "=== 正在解壓縮 ios.zip ==="
             unzip -o ios.zip
           fi
+          
+          echo "=== 正在安裝 npm 依賴套件 ==="
+          npm install
           
           if [ -f "ios/cert/distribution.p12" ]; then
             echo "✅ 成功找到 distribution.p12 憑證！"
@@ -19,7 +23,7 @@ workflows:
             echo "⚠️ 警告：未找到 p12 憑證，請檢查 zip 內容。"
           fi
 
-      - name: 本地憑證安裝與 Xcode 打包
+      - name: 2. 本地憑證安裝與 Xcode 打包
         script: |
           # 1. 建立並初始化鑰匙圈
           keychain initialize
@@ -73,7 +77,3 @@ workflows:
                      -exportPath ../../build_output
     artifacts:
       - build_output/**/*.ipa
-    publishing:
-      email:
-        recipients:
-          - your-email@example.com
