@@ -34,7 +34,12 @@ workflows:
 
       - name: Build IPA with Xcode
         script: |
-          # 1. 同步 Capacitor iOS 專案結構（自動生成 ios/App 資料夾）
+          # 1. 如果找不到 ios/App，自動透過 Capacitor 補齊 iOS 平台結構
+          if [ ! -d "ios/App" ]; then
+            echo "=== 正在自動補齊 iOS 平台專案 ==="
+            npx cap add ios
+          fi
+          
           npx cap sync ios
           
           # 2. 進入 iOS 專案目錄
