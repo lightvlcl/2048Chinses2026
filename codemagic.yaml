@@ -15,18 +15,20 @@ workflows:
             npx cap add ios
           fi
           
-          # 自動在 Podfile 加入語法，強制關閉 Pods 的簽署需求，解決互相打架的問題
-          if [ -f "ios/App/Podfile" ]; then
-            echo "
-          post_install do |installer|
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-              end
-            end
-          end
-          " >> ios/App/Podfile
-          fi
+          # 用 Node.js 安全地將 Pods 簽署關閉設定插入原本的 Podfile，避免重複宣告
+          node -e '
+            const fs = require("fs");
+            let p = "ios/App/Podfile";
+            let content = fs.readFileSync(p, "utf8");
+            if (!content.includes("CODE_SIGNING_ALLOWED")) {
+              content = content.replace(
+                "post_install do |installer|",
+                "post_install do |installer|\\n  installer.pods_project.targets.each do |target|\\n    target.build_configurations.each do |config|\\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27\\n    end\\n  end"
+              );
+              fs.writeFileSync(p, content, "utf8");
+              console.log("Successfully injected signing bypass into Podfile");
+            }
+          '
 
           npx cap sync ios
 
@@ -35,7 +37,6 @@ workflows:
           set -e
           mkdir -p build_output
 
-          # 將正確的描述檔指定帶回主專案打包
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
