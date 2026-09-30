@@ -20,54 +20,18 @@ workflows:
           
           npx cap sync ios
 
-      - name: 🔍 診斷與列出所有問題
-        script: |
-          echo "========================================="
-          echo "1. 檢查 Codemagic 後台是否有成功匯入憑證與描述檔"
-          echo "========================================="
-          echo "【系統內的 Provisioning Profiles 資料夾內容】"
-          ls -la ~/Library/MobileDevice/Provisioning\ Profiles/ || echo "資料夾不存在"
-
-          echo ""
-          echo "【解讀描述檔內容（找尋 UUID 與 Name）】"
-          for f in ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision; do
-            if [ -f "$f" ]; then
-              echo "檔案: $f"
-              security smime -D -i "$f" 2>/dev/null | grep -A 2 -B 2 -E "Name|UUID|CFBundleIdentifier" || true
-              echo "-----------------------------------------"
-            fi
-          done
-
-          echo ""
-          echo "========================================="
-          echo "2. 檢查鑰匙圈（Keychain）中的憑證"
-          echo "========================================="
-          security find-identity -v -p codesigning
-
-          echo ""
-          echo "========================================="
-          echo "3. 檢查專案本身的設定 (pbxproj)"
-          echo "========================================="
-          grep -i "PROVISIONING_PROFILE" ios/App/App.xcodeproj/project.pbxproj || echo "找不到 PROVISIONING_PROFILE 設定"
-
-          # 嘗試執行官方設定描述檔指令
-          echo ""
-          echo "執行 xcode-project use-profiles:"
-          xcode-project use-profiles || echo "use-profiles 執行失敗"
-
-      - name: Build and Export IPA
+      - name: Build and Export IPA (Automatic Signing)
         script: |
           set -e
           mkdir -p build_output
 
+          # 改用自動簽署 (Automatic)，由 Xcode 與你的 Team ID 自動匹配發行憑證與描述檔
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
             -configuration Release \
             -archivePath build_output/App.xcarchive \
             archive \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution: LI Vincent (58RATT4ABA)" \
-            PROVISIONING_PROFILE_SPECIFIER="Game2048Profile" \
+            CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="ZDK96PR9X3" \
             PRODUCT_BUNDLE_IDENTIFIER="com.lightvlcl.2048Chinses2026"
 
@@ -77,11 +41,8 @@ workflows:
             -exportOptionsPlist <(cat <<EOF
           {
             "method": "app-store",
-            "signingStyle": "manual",
+            "signingStyle": "automatic",
             "teamID": "ZDK96PR9X3",
-            "provisioningProfiles": {
-              "com.lightvlcl.2048Chinses2026": "Game2048Profile"
-            },
             "stripSwiftSymbols": true
           }
           EOF
