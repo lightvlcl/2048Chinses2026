@@ -51,7 +51,7 @@ workflows:
           export APP_STORE_CONNECT_KEY_IDENTIFIER="$KEY_ID"
           export APP_STORE_CONNECT_PRIVATE_KEY="$(cat "$PRIVATE_KEY_PATH")"
 
-          echo "=== [2/4] 現場建立並下載全新憑證與描述檔 ==="
+          echo "=== [2/4] 自動建立並下載全新憑證與描述檔 ==="
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
