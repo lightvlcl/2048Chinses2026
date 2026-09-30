@@ -51,8 +51,8 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 6. 安裝描述檔到系統
-          PROFILE_UUID=$(grep -a -A 1 -E "<key>UUID</key>" "$PROFILE_PATH" | tail -n 1 | sed -e 's/<string>//g' -e 's/<\/string>//g' | tr -d '[:space:]')
+          # 6. 安裝描述檔到系統並取得 UUID
+          PROFILE_UUID="0d171b19-adf4-480b-8cdb-63a95528ff67"
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID.mobileprovision"
           echo "✅ 描述檔安裝完成！UUID: $PROFILE_UUID"
@@ -60,23 +60,31 @@ workflows:
           # 7. 進入 iOS 專案目錄
           cd ios/App
 
-          # 8. 使用 Xcode 專案自身設定進行 Archive（不強加命令列簽署覆蓋 Pods，避免 Pods 報錯）
+          # 8. 強制設定 Xcode 專案為手動簽署 (Manual Signing)，綁定你的 Team ID 與描述檔 UUID
+          echo "=== 正在設定專案簽署屬性 ==="
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' App.xcodeproj/project.pbxproj
+          sed -i '' 's/DevelopmentTeam = "";/DevelopmentTeam = "58RATT4ABA";/g' App.xcodeproj/project.pbxproj
+
+          # 9. 開始進行 Xcode Archive 打包
           echo "=== 開始進行 Xcode Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
+                     PROVISIONING_PROFILE_SPECIFIER="2048 Distribution Profile" \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
                      -allowProvisioningUpdates \
                      archive -archivePath build/App.xcarchive
                      
-          # 9. 建立 exportOptions.plist 並匯出 .ipa 檔案
+          # 10. 建立 exportOptions.plist 並匯出 .ipa 檔案
           echo "=== 正在建立 exportOptions.plist ==="
           cat <<EOF > exportOptions.plist
           {
             "method": "ad-hoc",
             "teamID": "58RATT4ABA",
-            "signingStyle": "automatic",
+            "signingStyle": "manual",
+            "signingCertificate": "Apple Distribution",
             "provisioningProfiles": {
               "com.lightvlcl.2048Chinses2026": "$PROFILE_UUID"
             }
