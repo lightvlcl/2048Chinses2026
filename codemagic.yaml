@@ -25,6 +25,21 @@ workflows:
           set -e
           mkdir -p build_output
 
+          # 使用 trap 攔截錯誤，當編譯失敗時自動執行診斷與改善建議
+          trap '
+            echo "========================================="
+            echo "❌ [診斷報告] 建置失敗！"
+            echo "========================================="
+            echo "【可能原因與改善方法】"
+            echo "1. App Store Connect API 連線失敗或權限不足："
+            echo "   ➜ 請確認 Codemagic 後台的 App Store Connect Integration 是否正確綁定。"
+            echo "2. Bundle ID (com.lightvlcl.2048Chinses2026) 在憑證帳號中尚未建立："
+            echo "   ➜ 請確認 Apple Developer 網站是否已建立此 App ID。"
+            echo "3. 憑證與配置檔不同步："
+            echo "   ➜ 請嘗試在 Codemagic 重新整理授權或確認 Team ID 是否為 ZDK96PR9X3。"
+            echo "========================================="
+          ' ERR
+
           # 加上 -allowProvisioningUpdates 讓 Xcode 在雲端自動獲取描述檔
           xcodebuild -workspace ios/App/App.xcworkspace \
             -scheme "App" \
