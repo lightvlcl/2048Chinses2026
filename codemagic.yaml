@@ -14,15 +14,12 @@ workflows:
           if [ ! -d "ios" ]; then
             npx cap add ios
           fi
-          
-          # 用單行 Node.js 指令安全地將 Pods 簽署關閉設定注入 Podfile，解決互相打架問題
           node -e 'const fs=require("fs");let p="ios/App/Podfile";let c=fs.readFileSync(p,"utf8");if(!c.includes("CODE_SIGNING_ALLOWED")){c=c.replace("post_install do |installer|", "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\x27CODE_SIGNING_ALLOWED\x27] = \x27NO\x27\n    end\n  end");fs.writeFileSync(p,c,"utf8");console.log("Injected signing bypass successfully");}'
-          
           npx cap sync ios
 
+      # 【非常重要】必須確保有這一個步驟，雲端機器才會安裝描述檔！
       - name: Set up code signing profiles
         script: |
-          # 關鍵：這行指令會把你在 Codemagic 帳戶上傳的描述檔自動安裝到編譯環境中
           xcode-project use-profiles
 
       - name: Build and Export IPA
