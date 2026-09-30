@@ -74,9 +74,9 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並設定主 App 手動簽署
+          # 7. 進入 iOS 專案目錄並設定手動簽署（同時清理 Pods 專案設定）
           cd ios/App
-          echo "=== 正在設定手動簽署與 Development Team ==="
+          echo "=== 正在設定手動簽署與清理 Pods 設定 ==="
 
           python3 -c '
           import sys, re
@@ -90,10 +90,22 @@ workflows:
 
           with open(pbxproj_path, "w") as f:
               f.write(content)
-          print("✅ 成功更新專案簽署設定")
+
+          # 將 Pods 專案的簽署改回 Automatic，避免 Pods 報錯
+          pods_pbx = "../Pods/Pods.xcodeproj/project.pbxproj"
+          try:
+              with open(pods_pbx, "r") as f:
+                  pods_content = f.read()
+              pods_content = re.sub(r"CODE_SIGN_STYLE = Manual;", "CODE_SIGN_STYLE = Automatic;", pods_content)
+              pods_content = re.sub(r"PROVISIONING_PROFILE_SPECIFIER = \"[^\"]*\";", "", pods_content)
+              with open(pods_pbx, "w") as f:
+                  f.write(pods_content)
+              print("✅ 成功更新主專案並將 Pods 設為 Automatic")
+          except Exception as e:
+              print("⚠️ Pods 專案調整略過:", e)
           '
 
-          # 8. 執行 Archive 打包（精準針對 App 目標套用簽署，避免 Pods 報錯）
+          # 8. 執行 Archive 打包（加入 CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION 避免憑證對應報錯）
           echo "=== 開始進行 Archive 打包 (Manual Signing) ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
@@ -103,7 +115,8 @@ workflows:
                      CODE_SIGN_STYLE=Manual \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_IDENTITY="Apple Distribution" \
-                     PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID"
+                     PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" \
+                     CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES
 
           # 9. 建立合法的 exportOptions.plist（手動模式）
           echo "=== 正在建立 exportOptions.plist ==="
