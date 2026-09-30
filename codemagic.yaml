@@ -30,57 +30,26 @@ workflows:
           set -e
           mkdir -p build_output
 
-          echo "=== [2/4] 初始化鑰匙圈與安裝憑證/描述檔 ==="
+          echo "=== [2/4] 初始化鑰匙圈與正確解碼安裝描述檔 ==="
           keychain initialize
 
-          # 1. 建立 Xcode 描述檔存放路徑
-          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
-          USER_DATA_PROFILE_DIR="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
-          mkdir -p "$PROFILE_DIR"
-          mkdir -p "$USER_DATA_PROFILE_DIR"
+          # 1. 使用 Python 將二進位格式的 .mobileprovision 描述檔解碼並寫入正確位置
+          python3 -c '
+          import os, base64
 
-          # 2. 寫入描述檔
-          PROFILE_CONTENT='<?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>AppIDName</key>
-              <string>2048 Chinese 2026</string>
-              <key>ApplicationIdentifierPrefix</key>
-              <array><string>58RATT4ABA</string></array>
-              <key>CreationDate</key>
-              <date>2026-09-30T09:14:27Z</date>
-              <key>Platform</key>
-              <array><string>iOS</string><string>xrOS</string><string>visionOS</string></array>
-              <key>IsXcodeManaged</key>
-              <false/>
-              <key>DeveloperCertificates</key>
-              <array>
-                  <data>MIIFwzCCBKugAwIBAgIQA3BSm8J/9HmS0dV0A+wnHjANBgkqhkiG9w0BAQsFADB1MUQwQgYDVQQDDDtBcHBsZSBXb3JsZHdpZGUgRGV2ZWxvcGVyIFJlbGF0aW9ucyBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTELMAkGA1UECwwCRzMxEzARBgNVBAoMCkFwcGxlIEluYy4xCzAJBgNVBAYTAlVTMB4XDTI2MDkzMDA1NTUyNVoXDTI3MDkzMDA1NTUyNFowgYkxGjAYBgoJkiaJk/IsZAEBDAo1OFJBVFQ0QUJBMTQwMgYDVQQDDCtBcHBsZSBEaXN0cmlidXRpb246IExJIFZpbmNlbnQgKDU4UkFUVDRBQkEpMRMwEQYDVQQLDAo1OFJBVFQ0QUJBMRMwEQYDVQOKDApMSSBWaW5jZW50MQswCQYDVQQGEwJVUzCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAM5cT66aIxd5n4Q+sKj60xOEuVku53x1+j2PGGgsBC91uv8Qq29lVrHFC2tZY5i3g20l/yCWQz474WTLNR4a4dwT8H8PVAl+wJAeH1BiFIq6qr5mkW6VXGoB1nXjzPSdhyIOUi7iTloVXNdGhFCbderNBAJDae/GZk97oZT17HFsVVxDopClydJzvY3mo7iTFoRwaZhhsWKr+zuKe7112g1mAm7DBdqiRtyaBW0OQkGC36LkGikOB/zm0weTF+mMG7TdLYfMBQxK6RSpupY02BddgNykzefEgzBsoaxhfgjUi4Q0gANCxacBASO8/2OAinszSQDzBnZF5NCfQLqyAjcCAwEAAaOCAjgwggI0MAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUCf7AFZD5r2QKkhK5JihjDJfsp7IwcAYIKwYBBQUHAQEEZDBiMC0GCCsGAQUFBzAChiFodHRwOi8vY2VydHMuYXBwbGUuY29tL3d3ZHJnMy5kZXIwMQYIKwYBBQUHMAGGJWh0dHA6Ly9vY3NwLmFwcGxlLmNvbS9vY3NwMDMtd3dkcmczMDUwggEeBgNVHSAEggEVMIIBETCCAQ0GCSqGSIb3Y2QFATCB/zCBwwYIKwYBBQUHAgIwgbYMgbNSZWxpYW5jZSBvbiB0aGlzIGNlcnRpZmljYXRlIGJ5 IgFueSBwYXJ0eSBhc3N1bWVzIGFjY2VwdGFuY2Ugb2YgdGhlIHRoZW4gYXBwbGljYWJsZSBzdGFuZGFyZCB0ZXJtcyBhbmQgY29uZGl0aW9ucyBvZiB1c2UsIGNlcnRpZmljYXRlIHBvbGljeSBhbmQgY2VydGlmaWNhdGlvbiBwcmFjdGljZSBzdGF0ZW1lbnRzLjA3BggrBgEFBQcCARYraHR0cHM6Ly93d3cuYXBwbGUuY29tL2NlcnRpZmljYXRlYXV0aG9yaXR5LzAWBgNVHSUBAf8EDDAKBggrBgEFBQcDAzAdBgNVHQ4EFgQUOtSdd71Av58LaOmU4umjUR02ItcwDgYDVR0PAQH/BAQDAgeAMBMGCiqGSIb3Y2QGAQcBAf8EAgUAMBMGCiqGSIb3Y2QGAQQBAf8EAgUAMA0GCSqGSIb3DQEBCwUAA4IBAQCUvUP5u5Ps/vyk+3Y/mT3oQE89YS5jhjs4M0iuBqJOK0igteo8CY9Ue5UttFNP2VMguq09/wegqY3NhNkABZMFZT8iKECA8V8ubra1cjYbK2oIppWqTfmPIAarspYdpUgwR6si64KlojKJ5urEkEtJhUZMQBb66Qtmcpfyb40QhpqXzQ2JDnaaeUzcNobMAV8Ud78ZKG73jODDzBGxiRI5RfMxiGUizzBOWbpwMvzqt8KWbF856N9Id+3TWfMoadJUC2iS3gJnr4zZUKHOVUz6A5JG3QV6tY8+qblZwY5nMtHajLTZkAywJeRWKGRgqpVlHdppEUWQL4Ml9VPdAOuA</data>
-              </array>
-              <key>Entitlements</key>
-              <dict>
-                  <key>beta-reports-active</key><true/>
-                  <key>application-identifier</key><string>58RATT4ABA.com.lightvlcl.2048Chinses2026</string>
-                  <key>keychain-access-groups</key>
-                  <array><string>58RATT4ABA.*</string><string>com.apple.token</string></array>
-                  <key>get-task-allow</key><false/>
-                  <key>com.apple.developer.team-identifier</key><string>58RATT4ABA</string>
-              </dict>
-              <key>ExpirationDate</key><date>2027-09-30T05:55:24Z</date>
-              <key>Name</key><string>2048 Distribution Profile</string>
-              <key>TeamIdentifier</key><array><string>58RATT4ABA</string></array>
-              <key>TeamName</key><string>LI Vincent</string>
-              <key>TimeToLive</key><integer>364</integer>
-              <key>UUID</key><string>0d171b19-adf4-480b-8cdb-63a95528ff67</string>
-              <key>Version</key><integer>1</integer>
-          </dict>
-          </plist>'
+          der_b64 = """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"""
+          
+          binary_data = base64.b64decode(der_b64.replace("\n", "").replace(" ", ""))
+          
+          for p_dir in ["/Users/builder/Library/MobileDevice/Provisioning Profiles", "/Users/builder/Library/Developer/Xcode/UserData/Provisioning Profiles"]:
+              os.makedirs(p_dir, exist_ok=True)
+              file_path = os.path.join(p_dir, "0d171b19-adf4-480b-8cdb-63a95528ff67.mobileprovision")
+              with open(file_path, "wb") as f:
+                  f.write(binary_data)
+          print("✅ 二進位描述檔已成功解碼並安裝至 Xcode 目錄！")
+          '
 
-          echo "$PROFILE_CONTENT" > "$PROFILE_DIR/0d171b19-adf4-480b-8cdb-63a95528ff67.mobileprovision"
-          echo "$PROFILE_CONTENT" > "$USER_DATA_PROFILE_DIR/0d171b19-adf4-480b-8cdb-63a95528ff67.mobileprovision"
-
-          # 3. 使用 Python 安全寫入 .p8 金鑰，避開 YAML 減號衝突
+          # 2. 使用 Python 安全寫入 .p8 金鑰
           python3 -c '
           import os
           path = os.path.expanduser("~/.appstoreconnect/private_keys/AuthKey_ZDK96PR9X3.p8")
