@@ -1,5 +1,5 @@
 # ============================================================
-# Codemagic 完整自動化打包與 TestFlight 發布版 —— iOS 專用
+# Codemagic 自動簽署修正版 —— iOS 專用
 # ============================================================
 workflows:
   ios-release:
@@ -30,43 +30,26 @@ workflows:
           if [ -f "$ICON_DIR/AppIcon-512.png" ]; then
             cp resources/icon-1024.png "$ICON_DIR/AppIcon-512.png"
           fi
-      - name: Set up code signing
+      - name: Set up code signing & Force Automatic
         script: |
+          # 1. 抓取憑證
           app-store-connect fetch-signing-profiles \
             --issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
-          xcode-project use-profiles
+          
+          # 2. 強制將專案設定改為自動簽署 (Automatic) 避免報錯
+          cd ios/App
+          plutil -replace PBXTarget.attributes.TargetAttributes.App.ProvisioningStyle -string Automatic App.xcodeproj/project.pbxproj || true
+          cd ../..
       - name: Build IPA
         script: |
           set -e
-          # 使用強制自動簽署與 Release 模式打包
-          xcodebuild -workspace "ios/App/App.xcworkspace" \
-            -scheme "App" \
-            -configuration Release \
-            -archivePath "$HOME/Library/Developer/Xcode/Archives/App.xcarchive" \
-            archive \
-            CODE_SIGN_STYLE=Automatic
-
-          # 建立輸出資料夾並匯出 IPA
-          mkdir -p "$HOME/output"
-          xcodebuild -exportArchive \
-            -archivePath "$HOME/Library/Developer/Xcode/Archives/App.xcarchive" \
-            -exportPath "$HOME/output" \
-            -exportOptionsPlist ios/ExportOptions.plist || \
-          xcodebuild -exportArchive \
-            -archivePath "$HOME/Library/Developer/Xcode/Archives/App.xcarchive" \
-            -exportPath "$HOME/output" \
-            -exportOptionsPlist <(cat <<EOF
-          {
-            "method": "app-store",
-            "signingStyle": "automatic",
-            "stripSwiftSymbols": true,
-            "teamID": "ZDK96PR9X3"
-          }
-          EOF
-          )
+          xcode-project build-ipa \
+            --workspace "ios/App/App.xcworkspace" \
+            --scheme "App" \
+            --code-sign-style Automatic
       - name: Publish to TestFlight
         script: |
           app-store-connect publish \
-            --path "$(find $HOME/output -name "*.ipa")"
+            --path "$(find $(pwd) -name "*.ipa")"
