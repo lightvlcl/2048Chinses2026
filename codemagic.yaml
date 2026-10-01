@@ -40,11 +40,11 @@ workflows:
           echo "=== 正在使用密碼匯入 p12 憑證到鑰匙圈 ==="
           security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "snVWkEtR" -A -T /usr/bin/codesign
 
-          # 4. 安裝行動描述檔到系統指定目錄並取得 UUID
+          # 4. 安裝行動描述檔到系統指定目錄並取得 UUID 與類型
           echo "=== 正在安裝行動描述檔 ==="
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
 
-          PROVISIONING_PROFILE_UUID=$(python3 -c '
+          PROFILE_INFO=$(python3 -c '
           import plistlib, sys
           try:
               with open(sys.argv[1], "rb") as f:
@@ -52,13 +52,34 @@ workflows:
               start = content.index(b"<?xml")
               end = content.rindex(b"</plist>") + len(b"</plist>")
               plist_data = plistlib.loads(content[start:end])
-              print(plist_data["UUID"])
+              
+              uuid = plist_data.get("UUID", "")
+              entitlements = plist_data.get("Entitlements", {})
+              get_task_allow = entitlements.get("get-task-allow", False)
+              provisions_sub_devices = plist_data.get("ProvisionsAllDevices", False)
+              
+              # 自動判斷 export method
+              if get_task_allow:
+                  method = "development"
+              elif provisions_sub_devices:
+                  method = "ad-hoc"
+              else:
+                  # 預設多數上架用或未特別標註的為 app-store
+                  method = "app-store"
+                  
+              print(f"UUID:{uuid}")
+              print(f"METHOD:{method}")
           except Exception as e:
-              print(e, file=sys.stderr)
+              print(f"ERROR:{e}", file=sys.stderr)
               sys.exit(1)
           ' "$PROFILE_PATH")
 
+          PROVISIONING_PROFILE_UUID=$(echo "$PROFILE_INFO" | grep "UUID:" | cut -d':' -f2)
+          EXPORT_METHOD=$(echo "$PROFILE_INFO" | grep "METHOD:" | cut -d':' -f2)
+
           echo "🔑 成功取得描述檔 UUID: $PROVISIONING_PROFILE_UUID"
+          echo "📦 自動判定打包分發類型 (Export Method): $EXPORT_METHOD"
+          
           cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
 
           # 5. 同步 Capacitor iOS 專案
@@ -74,12 +95,14 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並設定手動簽署（同時清理 Pods 專案設定）
+          # 7. 進入 iOS 專案目錄並設定手動簽署，同時徹底清除 Pods 專案的簽署限制
           cd ios/App
-          echo "=== 正在設定手動簽署與清理 Pods 設定 ==="
+          echo "=== 正在設定手動簽署與清理 Pods 專案簽署設定 ==="
 
           python3 -c '
           import sys, re
+
+          # 修改主專案
           pbxproj_path = "App.xcodeproj/project.pbxproj"
           with open(pbxproj_path, "r") as f:
               content = f.read()
@@ -91,21 +114,22 @@ workflows:
           with open(pbxproj_path, "w") as f:
               f.write(content)
 
-          # 將 Pods 專案的簽署改回 Automatic，避免 Pods 報錯
-          pods_pbx = "../Pods/Pods.xcodeproj/project.pbxproj"
+          # 深度清理 Pods 專案內所有 target 的簽署限制，避免報錯
+          pods_pbx = "Pods/Pods.xcodeproj/project.pbxproj"
           try:
               with open(pods_pbx, "r") as f:
                   pods_content = f.read()
               pods_content = re.sub(r"CODE_SIGN_STYLE = Manual;", "CODE_SIGN_STYLE = Automatic;", pods_content)
               pods_content = re.sub(r"PROVISIONING_PROFILE_SPECIFIER = \"[^\"]*\";", "", pods_content)
+              pods_content = re.sub(r"CODE_SIGN_IDENTITY = \"[^\"]*\";", "CODE_SIGN_IDENTITY = \"Apple Development\";", pods_content)
               with open(pods_pbx, "w") as f:
                   f.write(pods_content)
-              print("✅ 成功更新主專案並將 Pods 設為 Automatic")
+              print("✅ 成功更新主專案，並徹底清除 Pods 專案的簽署限制")
           except Exception as e:
               print("⚠️ Pods 專案調整略過:", e)
           '
 
-          # 8. 執行 Archive 打包（加入 CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION 避免憑證對應報錯）
+          # 8. 執行 Archive 打包
           echo "=== 開始進行 Archive 打包 (Manual Signing) ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
@@ -116,14 +140,16 @@ workflows:
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_IDENTITY="Apple Distribution" \
                      PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" \
-                     CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES
+                     CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
+                     -allowProvisioningUpdates
 
-          # 9. 建立合法的 exportOptions.plist（手動模式）
+          # 9. 建立動態適應的 exportOptions.plist
           echo "=== 正在建立 exportOptions.plist ==="
           python3 -c '
-          import plistlib, sys
+          import plistlib, os
+          method = os.environ.get("EXPORT_METHOD", "app-store")
           data = {
-              "method": "ad-hoc",
+              "method": method,
               "teamID": "58RATT4ABA",
               "signingStyle": "manual",
               "provisioningProfiles": {
@@ -132,6 +158,7 @@ workflows:
           }
           with open("exportOptions.plist", "wb") as f:
               plistlib.dump(data, f)
+          print(f"✅ exportOptions.plist 建立完成，method 設定為: {method}")
           '
 
           # 10. 正在匯出 .ipa 檔案
