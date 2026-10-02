@@ -38,7 +38,26 @@ workflows:
           echo "=== 正在安裝 npm 依賴套件 ==="
           npm install
 
-          # 3. 初始化鑰匙圈並匯入 p12 憑證 (已更新正確密碼 zFIWXMyv)
+          # 2.1 自動修正舊版 AdMob 套件與新版 UMP SDK 的語法不相容問題
+          echo "=== 正在修復 AdMob 套件的 Swift 語法過期問題 ==="
+          python3 -c '
+          consent_file = "node_modules/@capacitor-community/admob/ios/Sources/AdMobPlugin/Consent/ConsentExecutor.swift"
+          try:
+              with open(consent_file, "r") as f:
+                  content = f.read()
+              
+              # 替換過時的 API
+              content = content.replace("UMPConsentInformation.sharedInstance", "UMPConsentInformation.shared")
+              content = content.replace("UMPConsentStatus.", "ConsentStatus.")
+              
+              with open(consent_file, "w") as f:
+                  f.write(content)
+              print("✅ 成功修復 ConsentExecutor.swift 內的過期語法")
+          except Exception as e:
+              print("⚠️ 修復 AdMob 檔案略過或路徑不同:", e)
+          '
+
+          # 3. 初始化鑰匙圈並匯入 p12 憑證
           keychain initialize
           DEFAULT_KEYCHAIN=$(keychain get-default)
           echo "=== 正在使用密碼匯入 p12 憑證到鑰匙圈 ==="
@@ -108,10 +127,10 @@ workflows:
           if "CODE_SIGNING_ALLOWED" not in content:
               if "post_install do |installer|" in content:
                   content = content.replace("post_install do |installer|", "post_install do |installer|" + signing_code)
-                  print("✅ 已成功將簽署關閉邏輯注入現有的 post_install 中")
+                  print("✅ 已將簽署關閉邏輯注入現有的 post_install 中")
               else:
                   content += "\npost_install do |installer|\n" + signing_code + "\nend\n"
-                  print("✅ 已成功新增 post_install 區塊")
+                  print("✅ 已新增 post_install 區塊")
               with open(podfile_path, "w") as f:
                   f.write(content)
           else:
@@ -138,7 +157,7 @@ workflows:
           with open(pbxproj_path, "r") as f:
               content = f.read()
           team_id = "58RATT4ABA"
-          content = re.sub(r"DevelopmentTeam = \"([^\"]*)\";", f"DevelopmentTeam = \"{team_id}\";", content)
+          content = re.sub(r"DevelopmentTeam = \"([^\"]*)\";", f"DevelopmentTeam = "{team_id}";", content)
           content = re.sub(r"CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;", content)
           with open(pbxproj_path, "w") as f:
               f.write(content)
