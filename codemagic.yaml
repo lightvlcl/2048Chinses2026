@@ -91,19 +91,18 @@ workflows:
             npx cap add ios
           fi
 
-          # 5.0 提前強制將 Podfile 與 Pod 專案的最低部署目標設為 14.0，避免版本衝突
-          echo "=== 正在調整 iOS 部署版本目標為 14.0 ==="
+          # 5.0 提前強制將 Podfile 平台版本設為 15.0
+          echo "=== 正在調整 iOS 部署版本目標為 15.0 ==="
           python3 -c '
           podfile_path = "ios/App/Podfile"
           try:
               with open(podfile_path, "r") as f:
                   content = f.read()
-              if "platform :ios" in content:
-                  import re
-                  content = re.sub(r"platform :ios, \x27[0-9.]+\x27", "platform :ios, \x2714.0\x27", content)
-                  with open(podfile_path, "w") as f:
-                      f.write(content)
-              print("✅ Podfile 平台版本已確保為 14.0")
+              import re
+              content = re.sub(r"platform :ios, \x27[0-9.]+\x27", "platform :ios, \x2715.0\x27", content)
+              with open(podfile_path, "w") as f:
+                  f.write(content)
+              print("✅ Podfile 平台版本已確保為 15.0")
           except Exception as e:
               print("⚠️ 調整 Podfile 平台版本略過:", e)
           '
@@ -122,7 +121,7 @@ workflows:
               target.build_configurations.each do |config|
                 config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
                 config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
-                config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "14.0"
+                config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "15.0"
               end
             end
           """
@@ -137,7 +136,7 @@ workflows:
               with open(podfile_path, "w") as f:
                   f.write(content)
           else:
-              print("ℹ️ Podfile 已包含簽署關閉設定")
+              print("ℹ️️ Podfile 已包含簽署關閉設定")
           '
 
           # 重新執行 pod install 使 Podfile 修改生效
