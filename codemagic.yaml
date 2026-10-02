@@ -1,9 +1,17 @@
 workflows:
-  my-workflow:
+  ios-build-workflow:
     name: 2048 iOS Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.lightvlcl.2048Chinses2026
     scripts:
-      - name: 穩健手動簽署打包流程
+      - name: 穩健手動簽署打包流程（含憑證對齊檢測）
         script: |
+          set -e
+
           # 1. 自動解壓縮憑證包
           if [ -f "ios.zip" ]; then
             echo "=== 正在解壓縮 ios.zip ==="
@@ -29,12 +37,6 @@ workflows:
           # 2. 安裝 npm 依賴
           echo "=== 正在安裝 npm 依賴套件 ==="
           npm install
-          
-          # (後面接您原本的其他腳本內容...)
-
-          # 2. 安裝 npm 依賴
-          echo "=== 正在安裝 npm 依賴套件 ==="
-          npm install
 
           # 3. 初始化鑰匙圈並匯入 p12 憑證
           keychain initialize
@@ -47,32 +49,25 @@ workflows:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
 
           PROFILE_INFO=$(python3 -c '
-          import plistlib, sys, subprocess, re
-
+          import plistlib, sys
           try:
               with open(sys.argv[1], "rb") as f:
                   content = f.read()
               start = content.index(b"<?xml")
               end = content.rindex(b"</plist>") + len(b"</plist>")
               plist_data = plistlib.loads(content[start:end])
-              
               uuid = plist_data.get("UUID", "")
               entitlements = plist_data.get("Entitlements", {})
               get_task_allow = entitlements.get("get-task-allow", False)
               provisions_sub_devices = plist_data.get("ProvisionsAllDevices", False)
-              
-              certs = plist_data.get("DeveloperCertificates", [])
-              
               if get_task_allow:
                   method = "development"
               elif provisions_sub_devices:
                   method = "ad-hoc"
               else:
                   method = "app-store"
-                  
               print(f"UUID:{uuid}")
               print(f"METHOD:{method}")
-              print(f"CERT_COUNT:{len(certs)}")
           except Exception as e:
               print(f"ERROR:{e}", file=sys.stderr)
               sys.exit(1)
@@ -99,39 +94,31 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並設定手動簽署 (超級徹底版：暴力清除 Pods 所有簽署屬性)
+          # 7. 進入 iOS 專案目錄並設定手動簽署
           cd ios/App
           echo "=== 正在設定主專案手動簽署，並徹底拔除 Pods 專案的所有簽署限制 ==="
 
           python3 -c '
           import sys, re
-
-          # 1. 強制設定主專案
           pbxproj_path = "App.xcodeproj/project.pbxproj"
           with open(pbxproj_path, "r") as f:
               content = f.read()
-
           team_id = "58RATT4ABA"
           content = re.sub(r"DevelopmentTeam = \"([^\"]*)\";", f"DevelopmentTeam = \"{team_id}\";", content)
           content = re.sub(r"CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;", content)
-
           with open(pbxproj_path, "w") as f:
               f.write(content)
 
-          # 2. 暴力清除 Pods 專案內所有 Target 的簽署欄位與 Profile 綁定
           pods_pbx = "Pods/Pods.xcodeproj/project.pbxproj"
           try:
               with open(pods_pbx, "r") as f:
                   pods_content = f.read()
-              
               pods_content = re.sub(r"CODE_SIGN_STYLE = Manual;", "CODE_SIGN_STYLE = Automatic;", pods_content)
               pods_content = re.sub(r".*PROVISIONING_PROFILE_SPECIFIER =.*?\n", "", pods_content)
               pods_content = re.sub(r".*PROVISIONING_PROFILE =.*?\n", "", pods_content)
               pods_content = re.sub(r".*CODE_SIGN_IDENTITY =.*?\n", "", pods_content)
-              
               with open(pods_pbx, "w") as f:
                   f.write(pods_content)
-              print("✅ 成功全面拔除 Pods 專案的所有手動簽署與描述檔綁定")
           except Exception as e:
               print("⚠️ Pods 專案調整略過:", e)
           '
@@ -165,14 +152,18 @@ workflows:
           }
           with open("exportOptions.plist", "wb") as f:
               plistlib.dump(data, f)
-          print(f"✅ exportOptions.plist 建立完成，method 設定為: {method}")
           '
 
-          # 10. 正在匯出 .ipa 檔案
+          # 10. 正在匯出 .ipa 檔案（改存放到專案根目錄底下的 build_output，確保能被抓取）
           echo "=== 正在匯出 .ipa 檔案 ==="
+          mkdir -p ../../build_output
           xcodebuild -exportArchive \
                      -archivePath build/App.xcarchive \
                      -exportOptionsPlist exportOptions.plist \
                      -exportPath ../../build_output
 
           echo "🎉 打包流程大功告成！"
+
+    publishing:
+      artifacts:
+        - build_output/*.ipa
