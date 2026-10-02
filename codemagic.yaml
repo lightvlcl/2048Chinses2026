@@ -154,7 +154,7 @@ workflows:
               plistlib.dump(data, f)
           '
 
-          # 10. 正在匯出 .ipa 檔案（改存放到專案根目錄底下的 build_output，確保能被抓取）
+          # 10. 正在匯出 .ipa 檔案
           echo "=== 正在匯出 .ipa 檔案 ==="
           mkdir -p ../../build_output
           xcodebuild -exportArchive \
@@ -164,6 +164,5 @@ workflows:
 
           echo "🎉 打包流程大功告成！"
 
-    publishing:
-      artifacts:
-        - build_output/*.ipa
+    artifacts:
+      - build_output/*.ipa
