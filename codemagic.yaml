@@ -38,11 +38,11 @@ workflows:
           echo "=== 正在安裝 npm 依賴套件 ==="
           npm install
 
-          # 3. 初始化鑰匙圈並匯入 p12 憑證
+          # 3. 初始化鑰匙圈並匯入 p12 憑證 (已更新正確密碼 zFIWXMyv)
           keychain initialize
           DEFAULT_KEYCHAIN=$(keychain get-default)
           echo "=== 正在使用密碼匯入 p12 憑證到鑰匙圈 ==="
-          security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "snVWkEtR" -A -T /usr/bin/codesign
+          security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "zFIWXMyv" -A -T /usr/bin/codesign
 
           # 4. 安裝行動描述檔到系統指定目錄並取得 UUID 與授權憑證清單
           echo "=== 正在安裝與分析行動描述檔 ==="
