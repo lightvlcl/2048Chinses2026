@@ -13,21 +13,27 @@ workflows:
           #!/usr/bin/env bash
           set -e
 
-          # 1. 自動解壓縮憑證包
-          if [ -f "ios.zip" ]; then
-            echo "=== 正在解壓縮 ios.zip ==="
-            unzip -o ios.zip
-          fi
+        # 1. 自動解壓縮憑證包
+if [ -f "ios.zip" ]; then
+  echo "=== 正在解壓縮 ios.zip ==="
+  unzip -o ios.zip
+fi
 
-          if [ -f "ios/cert/distribution.p12.p12" ]; then
-            mv ios/cert/distribution.p12.p12 ios/cert/distribution.p12
-            echo "✅ 已將憑證重新命名為標準 distribution.p12"
-          fi
+# 自動將實際檔名對應重新命名為標準名稱
+if [ -f "ios/cert/2048_distribution_cert.p12" ]; then
+  mv ios/cert/2048_distribution_cert.p12 ios/cert/distribution.p12
+  echo "✅ 已將憑證重新命名為 distribution.p12"
+fi
 
-          CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
-          PROFILE_PATH=$(find . -name "profile.mobileprovision" | head -n 1)
-          echo "✅ 定位憑證路徑: $CERT_PATH"
-          echo "✅ 定位描述檔路徑: $PROFILE_PATH"
+if [ -f "ios/cert/2048_AppStore_Profile.mobileprovision" ]; then
+  mv ios/cert/2048_AppStore_Profile.mobileprovision ios/cert/profile.mobileprovision
+  echo "✅ 已將描述檔重新命名為 profile.mobileprovision"
+fi
+
+CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
+PROFILE_PATH=$(find . -name "profile.mobileprovision" | head -n 1)
+echo "✅ 定位憑證路徑: $CERT_PATH"
+echo "✅ 定位描述檔路徑: $PROFILE_PATH"
 
           # 2. 安裝 npm 依賴
           echo "=== 正在安裝 npm 依賴套件 ==="
