@@ -38,24 +38,9 @@ workflows:
           echo "=== 正在安裝 npm 依賴套件 ==="
           npm install
 
-          # 2.1 自動修正舊版 AdMob 套件與新版 UMP SDK 的語法不相容問題
-          echo "=== 正在修復 AdMob 套件的 Swift 語法過期問題 ==="
-          python3 -c '
-          consent_file = "node_modules/@capacitor-community/admob/ios/Sources/AdMobPlugin/Consent/ConsentExecutor.swift"
-          try:
-              with open(consent_file, "r") as f:
-                  content = f.read()
-              
-              # 替換過時的 API
-              content = content.replace("UMPConsentInformation.sharedInstance", "UMPConsentInformation.shared")
-              content = content.replace("UMPConsentStatus.", "ConsentStatus.")
-              
-              with open(consent_file, "w") as f:
-                  f.write(content)
-              print("✅ 成功修復 ConsentExecutor.swift 內的過期語法")
-          except Exception as e:
-              print("⚠️ 修復 AdMob 檔案略過或路徑不同:", e)
-          '
+          # 2.1 自動將 AdMob 升級至最新版本以解決 UMP SDK 語法衝突
+          echo "=== 正在升級 @capacitor-community/admob 至最新版本 ==="
+          npm install @capacitor-community/admob@latest
 
           # 3. 初始化鑰匙圈並匯入 p12 憑證
           keychain initialize
