@@ -136,7 +136,7 @@ workflows:
               with open(podfile_path, "w") as f:
                   f.write(content)
           else:
-              print("ℹ️️ Podfile 已包含簽署關閉設定")
+              print("ℹ️ Podfile 已包含簽署關閉設定")
           '
 
           # 重新執行 pod install 使 Podfile 修改生效
@@ -149,9 +149,9 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並設定主專案手動簽署
+          # 7. 進入 iOS 專案目錄並設定主專案手動簽署與部署目標 15.0
           cd ios/App
-          echo "=== 正在設定主專案手動簽署 ==="
+          echo "=== 正在設定主專案手動簽署與升級部署版本至 15.0 ==="
 
           python3 -c '
           import sys, re
@@ -161,8 +161,11 @@ workflows:
           team_id = "58RATT4ABA"
           content = re.sub(r"DevelopmentTeam = \"([^\"]*)\";", f"DevelopmentTeam = \"{team_id}\";", content)
           content = re.sub(r"CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;", content)
+          # 強制將主專案的 IPHONEOS_DEPLOYMENT_TARGET 提升至 15.0
+          content = re.sub(r"IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;", "IPHONEOS_DEPLOYMENT_TARGET = 15.0;", content)
           with open(pbxproj_path, "w") as f:
               f.write(content)
+          print("✅ 主專案手動簽署與 IPHONEOS_DEPLOYMENT_TARGET = 15.0 設定完成")
           '
 
           # 8. 執行 Archive 打包
