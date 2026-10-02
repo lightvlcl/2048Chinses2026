@@ -94,12 +94,14 @@ workflows:
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 進入 iOS 專案目錄並設定手動簽署
+          # 7. 進入 iOS 專案目錄並設定手動簽署（徹底清除 Pods 的描述檔設定）
           cd ios/App
           echo "=== 正在設定主專案手動簽署，並徹底拔除 Pods 專案的所有簽署限制 ==="
 
           python3 -c '
           import sys, re
+
+          # 1. 強制設定主專案
           pbxproj_path = "App.xcodeproj/project.pbxproj"
           with open(pbxproj_path, "r") as f:
               content = f.read()
@@ -109,16 +111,34 @@ workflows:
           with open(pbxproj_path, "w") as f:
               f.write(content)
 
+          # 2. 暴力清除 Pods 專案內所有 Target 的簽署欄位與 Profile 綁定
           pods_pbx = "Pods/Pods.xcodeproj/project.pbxproj"
           try:
               with open(pods_pbx, "r") as f:
                   pods_content = f.read()
+              
+              # 將 Pods 改回 Automatic
               pods_content = re.sub(r"CODE_SIGN_STYLE = Manual;", "CODE_SIGN_STYLE = Automatic;", pods_content)
-              pods_content = re.sub(r".*PROVISIONING_PROFILE_SPECIFIER =.*?\n", "", pods_content)
-              pods_content = re.sub(r".*PROVISIONING_PROFILE =.*?\n", "", pods_content)
-              pods_content = re.sub(r".*CODE_SIGN_IDENTITY =.*?\n", "", pods_content)
+              
+              # 透過行過濾精準拔除 Pods 裡所有帶有描述檔與簽署身份的設定行
+              lines = pods_content.splitlines()
+              filtered_lines = []
+              for line in lines:
+                  if "PROVISIONING_PROFILE" in line or "CODE_SIGN_IDENTITY" in line or "DEVELOPMENT_TEAM" in line:
+                      # 保留不是設定具體數值的結構行，或者直接濾掉
+                      if "=" in line and ("string" not in line and ";" in line):
+                          continue
+                  filtered_lines.append(line)
+              
+              pods_content = "\n".join(filtered_lines)
+              
+              # 額外用正則清空常見的指定欄位
+              pods_content = re.sub(r"PROVISIONING_PROFILE_SPECIFIER\s*=\s*[^;]+;", "", pods_content)
+              pods_content = re.sub(r"PROVISIONING_PROFILE\s*=\s*[^;]+;", "", pods_content)
+
               with open(pods_pbx, "w") as f:
                   f.write(pods_content)
+              print("✅ 成功全面拔除 Pods 專案的所有手動簽署與描述檔綁定")
           except Exception as e:
               print("⚠️ Pods 專案調整略過:", e)
           '
