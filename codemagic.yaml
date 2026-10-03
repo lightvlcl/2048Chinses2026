@@ -163,18 +163,17 @@ workflows:
                      -exportOptionsPlist exportOptions.plist \
                      -exportPath ../../build_output
 
-          # 11. 自動配置 .p8 私鑰、設定權限並上傳至 TestFlight
+          # 11. 透過 Python 精準寫入 .p8 私鑰、設定 600 權限並上傳至 TestFlight
           echo "=== 正在配置 .p8 私鑰並上傳至 TestFlight ==="
           mkdir -p ~/.private_keys
 
-          cat << 'EOF' > ~/.private_keys/AuthKey_3N8266W3MT.p8
-          -----BEGIN PRIVATE KEY-----
-          MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQguckiA9PXkv0mW5VD
-          wmdLVk+2QLqbsqpU51i0vgyiyuqgCgYIKoZIzj0DAQehRANCAAS03fXpwRNSsstE
-          88XhBvKc5vrp7v/nzjpgCNC75h4HITEqeiNOjD3IikAS1ALTnI72zFezYjRMgNU/
-          8WzhEPNH
-          -----END PRIVATE KEY-----
-          EOF
+          python3 -c '
+          p8_content = "-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQguckiA9PXkv0mW5VD\nwmdLVk+2QLqbsqpU51i0vgyiyuqgCgYIKoZIzj0DAQehRANCAAS03fXpwRNSsstE\n88XhBvKc5vrp7v/nzjpgCNC75h4HITEqeiNOjD3IikAS1ALTnI72zFezYjRMgNU/\n8WzhEPNH\n-----END PRIVATE KEY-----\n"
+          import os
+          path = os.path.expanduser("~/.private_keys/AuthKey_3N8266W3MT.p8")
+          with open(path, "w") as f:
+              f.write(p8_content)
+          '
 
           chmod 600 ~/.private_keys/AuthKey_3N8266W3MT.p8
 
