@@ -1,15 +1,6 @@
 # ============================================================
 # 2048新中版 —— Codemagic 雲端建置設定
 # 全程免 Mac：codemagic.io 網頁端觸發 → 雲上 Mac 打包 → 產 .ipa
-#
-# 兩個 iOS workflow：
-#   1. ios-release        主線：用 Codemagic 原生 xcode-project 工具簽署（推薦先跑）
-#   2. ios-release-manual 備援：完全手動 xcodebuild，簽署設定由
-#                         tools/fix_ios_signing.py 精準寫入 pbxproj
-#
-# ⚠️ 安全提醒：ios/cert/ 與 ios.zip 內含「發布憑證 + 描述檔」，
-#    請務必使用私有 Git 倉庫；長期建議改放 Codemagic 的
-#    Code signing identities / Secure files（見 README）。
 # ============================================================
 
 definitions:
@@ -63,7 +54,7 @@ definitions:
         echo "憑證: $CERT_PATH"
         echo "描述檔: $PROFILE_PATH"
 
-        # p12 密碼：優先用 Codemagic 加密環境變數 P12_PASSWORD，否則帶入正確密碼 zFIWXMyv
+        # p12 密碼：優先用 Codemagic 加密環境變數 P12_PASSWORD，否則帶入預設密碼 zFIWXMyv
         P12_PASSWORD="${P12_PASSWORD:-zFIWXMyv}"
 
         echo "=== 初始化 keychain 並匯入憑證 ==="
@@ -79,7 +70,6 @@ definitions:
         start = data.index(b"<?xml")
         end = data.rindex(b"</plist>") + len(b"</plist>")
         p = plistlib.loads(data[start:end])
-        # 值一律加引號：Profile 名稱有空白，source 時才不會被切爛
         print('PROFILE_UUID="%s"' % p["UUID"])
         print('TEAM_ID="%s"' % p["TeamIdentifier"][0])
         print('PROFILE_NAME="%s"' % p.get("Name", ""))
@@ -110,7 +100,7 @@ definitions:
 
 workflows:
   # ============================================================
-  # 1) 主線：Codemagic 原生簽署工具
+  # 1) 主線：Codemagic 原生簽署工具 (TestFlight)
   # ============================================================
   ios-release:
     name: ① 打包 → TestFlight
@@ -172,7 +162,7 @@ workflows:
         release_type: MANUAL
 
   # ============================================================
-  # 1.8) 全自動上架（使用 .p8 私鑰）
+  # 1.8) 全自動上架（使用 .p8 私鑰）—— 已加入 asc_credentials 群組
   # ============================================================
   ios-auto-release:
     name: ③ 全自動：打包 → 上傳 → 送審
@@ -181,6 +171,8 @@ workflows:
     environment:
       node: v22
       xcode: latest
+      groups:
+        - asc_credentials   # 👈 這裡已正確引入 .p8 私鑰相關變數
       vars:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
@@ -323,7 +315,7 @@ workflows:
                      -sdk iphoneos \
                      -configuration Release \
                      -destination "generic/platform=iOS" \
-                     clean archive \
+                     -clean archive \
                      -archivePath "$CM_BUILD_DIR/build/App.xcarchive"
 
           python3 "$CM_BUILD_DIR/tools/make_export_options.py" \
@@ -346,7 +338,7 @@ workflows:
         submit_to_app_store: false
 
   # ============================================================
-  # 3) Google Play
+  # 3) Google Play (Android)
   # ============================================================
   android-release:
     name: 2048 Android Release
