@@ -8,7 +8,7 @@ workflows:
         distribution_type: app_store
         bundle_identifier: com.lightvlcl.2048Chinses2026
     scripts:
-      - name: 穩健手動簽署打包流程（成功版本）
+      - name: 穩健手動簽署打包流程（絕對路徑修正版）
         script: |
           set -e
 
@@ -137,21 +137,25 @@ workflows:
               f.write(content)
           '
 
-          # 8. 執行 Archive 打包 (於 ios/App 內執行)
-          echo "=== 開始進行 Archive 打包 ==="
+          # 取得專案根目錄與 ios/App 的絕對路徑
+          PROJECT_ROOT="$(pwd)/../.."
+          IOS_APP_DIR="$(pwd)"
+          ARCHIVE_PATH="$IOS_APP_DIR/build/App.xcarchive"
+
+          echo "=== 開始進行 Archive 打包 (絕對路徑: $ARCHIVE_PATH) ==="
           mkdir -p build
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
-                     -archivePath build/App.xcarchive \
+                     -archivePath "$ARCHIVE_PATH" \
                      CODE_SIGN_STYLE=Manual \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_IDENTITY="Apple Distribution" \
                      PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" \
                      CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
                      -allowProvisioningUpdates
-          cd ../..
+          cd "$PROJECT_ROOT"
 
           # 9. 建立 exportOptions.plist
           echo "=== 正在建立 exportOptions.plist ==="
@@ -170,11 +174,11 @@ workflows:
               plistlib.dump(data, f)
           '
 
-          # 10. 匯出 .ipa 檔案
+          # 10. 匯出 .ipa 檔案 (使用相同的絕對路徑讀取)
           echo "=== 正在匯出 .ipa 檔案 ==="
           mkdir -p build_output
           xcodebuild -exportArchive \
-                     -archivePath ios/App/build/App.xcarchive \
+                     -archivePath "$ARCHIVE_PATH" \
                      -exportOptionsPlist exportOptions.plist \
                      -exportPath build_output
 
