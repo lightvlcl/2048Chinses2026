@@ -149,6 +149,7 @@ workflows:
           '
           
           mkdir -p build_output
+          # 修正：將 archivePath 指向正確的 ios/App/build/App.xcarchive
           xcodebuild -exportArchive \
                      -archivePath ios/App/build/App.xcarchive \
                      -exportOptionsPlist exportOptions.plist \
