@@ -8,7 +8,7 @@ workflows:
         distribution_type: app_store
         bundle_identifier: com.lightvlcl.2048Chinses2026
     scripts:
-      - name: 穩健完整打包與自動發布流程
+      - name: 穩健手動簽署打包流程（成功版本）
         script: |
           set -e
 
@@ -20,32 +20,25 @@ workflows:
 
           if [ -f "ios/cert/2048_distribution_cert.p12" ]; then
             mv ios/cert/2048_distribution_cert.p12 ios/cert/distribution.p12
-            echo "✅ 已將憑證重新命名為 distribution.p12"
           fi
 
           if [ -f "ios/cert/2048_AppStore_Profile.mobileprovision" ]; then
             mv ios/cert/2048_AppStore_Profile.mobileprovision ios/cert/profile.mobileprovision
-            echo "✅ 已將描述檔重新命名為 profile.mobileprovision"
           fi
 
           CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
           PROFILE_PATH=$(find . -name "profile.mobileprovision" | head -n 1)
-          echo "✅ 定位憑證路徑: $CERT_PATH"
-          echo "✅ 定位描述檔路徑: $PROFILE_PATH"
 
           # 2. 安裝 npm 依賴與 AdMob 升級
-          echo "=== 正在安裝 npm 依賴與更新 AdMob ==="
           npm install
           npm install @capacitor-community/admob@latest
 
           # 3. 初始化鑰匙圈並匯入憑證
           keychain initialize
           DEFAULT_KEYCHAIN=$(keychain get-default)
-          echo "=== 正在匯入 p12 憑證到鑰匙圈 ==="
           security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "zFIWXMyv" -A -T /usr/bin/codesign
 
           # 4. 安裝行動描述檔並自動分析 UUID 與分發類型
-          echo "=== 正在安裝與分析行動描述檔 ==="
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
 
           PROFILE_INFO=$(python3 -c '
@@ -69,25 +62,19 @@ workflows:
               print(f"UUID:{uuid}")
               print(f"METHOD:{method}")
           except Exception as e:
-              print(f"ERROR:{e}", file=sys.stderr)
               sys.exit(1)
           ' "$PROFILE_PATH")
 
           PROVISIONING_PROFILE_UUID=$(echo "$PROFILE_INFO" | grep "UUID:" | cut -d':' -f2)
           EXPORT_METHOD=$(echo "$PROFILE_INFO" | grep "METHOD:" | cut -d':' -f2)
 
-          echo "🔑 成功取得描述檔 UUID: $PROVISIONING_PROFILE_UUID"
-          echo "📦 自動判定打包分發類型: $EXPORT_METHOD"
-
           cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
 
           # 5. 同步 Capacitor iOS 專案與 Podfile 修正
           if [ ! -d "ios/App" ]; then
-            echo "=== 正在自動補齊 iOS 平台專案 ==="
             npx cap add ios
           fi
 
-          echo "=== 正在調整 iOS 部署版本目標為 15.0 ==="
           python3 -c '
           podfile_path = "ios/App/Podfile"
           try:
@@ -98,12 +85,11 @@ workflows:
               with open(podfile_path, "w") as f:
                   f.write(content)
           except Exception as e:
-              print("⚠️ Podfile 調整略過:", e)
+              pass
           '
 
           npx cap sync ios
 
-          echo "=== 正在調整 Podfile 以關閉 Pods 簽署並設定目標版本 ==="
           python3 -c '
           podfile_path = "ios/App/Podfile"
           with open(podfile_path, "r") as f:
@@ -133,7 +119,6 @@ workflows:
           cd ../..
 
           # 6. 修正 Bundle ID
-          echo "=== 正在全面修正 Bundle ID ==="
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
@@ -151,21 +136,22 @@ workflows:
           with open(pbxproj_path, "w") as f:
               f.write(content)
           '
-          cd ../..
 
-          # 8. 執行 Archive 打包 (明確指定路徑)
+          # 8. 執行 Archive 打包 (於 ios/App 內執行)
           echo "=== 開始進行 Archive 打包 ==="
-          xcodebuild -workspace ios/App/App.xcworkspace \
+          mkdir -p build
+          xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
-                     -archivePath ios/App/build/App.xcarchive \
+                     -archivePath build/App.xcarchive \
                      CODE_SIGN_STYLE=Manual \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_IDENTITY="Apple Distribution" \
                      PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" \
                      CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
                      -allowProvisioningUpdates
+          cd ../..
 
           # 9. 建立 exportOptions.plist
           echo "=== 正在建立 exportOptions.plist ==="
@@ -192,12 +178,7 @@ workflows:
                      -exportOptionsPlist exportOptions.plist \
                      -exportPath build_output
 
-          # 11. 自動發布至 TestFlight
-          echo "=== 正在將 .ipa 發布至 TestFlight ==="
-          app-store-connect publish \
-            --path "$(find build_output -name "*.ipa" | head -n 1)"
-
-          echo "🎉 打包與自動上傳流程大功告成！"
+          echo "🎉 恭喜！打包與 .ipa 匯出成功完成！"
 
     artifacts:
       - build_output/*.ipa
