@@ -163,11 +163,11 @@ workflows:
                      -exportOptionsPlist exportOptions.plist \
                      -exportPath ../../build_output
 
-          # 11. 自動寫入私鑰並上傳至 TestFlight
+         # 11. 自動配置 .p8 私鑰、設定權限並上傳至 TestFlight
           echo "=== 正在配置 .p8 私鑰並上傳至 TestFlight ==="
           mkdir -p ~/.private_keys
 
-          # 將您提供的 .p8 內容動態寫入正確檔名中
+          # 寫入私鑰檔案
           cat << 'EOF' > ~/.private_keys/AuthKey_3N8266W3MT.p8
           -----BEGIN PRIVATE KEY-----
           MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQguckiA9PXkv0mW5VD
@@ -176,6 +176,9 @@ workflows:
           8WzhEPNH
           -----END PRIVATE KEY-----
           EOF
+
+          # 🔑 關鍵修正：Apple 工具強制要求私鑰檔案權限必須為 600（僅擁有者可讀寫）
+          chmod 600 ~/.private_keys/AuthKey_3N8266W3MT.p8
 
           IPA_PATH=$(find ../../build_output -name "*.ipa" | head -n 1)
 
