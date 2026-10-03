@@ -339,7 +339,6 @@ workflows:
     max_build_duration: 60
     environment:
       node: v22
-      java_version: 21
       groups:
         - android_credentials
     scripts:
