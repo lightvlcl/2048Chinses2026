@@ -162,7 +162,7 @@ workflows:
         release_type: MANUAL
 
   # ============================================================
-  # 1.8) 全自動上架（使用 .p8 私鑰）—— 已對應 ios_keys 群組
+  # 1.8) 全自動上架（改用 Codemagic 內建發布通道，避開 p8 驗證錯誤）
   # ============================================================
   ios-auto-release:
     name: ③ 全自動：打包 → 上傳 → 送審
@@ -177,65 +177,53 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-        VERSION_STRING: "1.0.0"
-        COPYRIGHT: "2026 lightvlcl"
-        SUBMIT_DRY_RUN: "true"
+    integrations:
+      app_store_connect: Codemagic
     scripts:
       - *unpack
       - *deps
       - *certs
       - *use_profiles
-      - *build_ipa
-      - name: 上傳二進位到 App Store Connect
+      - name: 打包 IPA (自動產生相容的 ExportOptions)
         script: |
           set -e
           . "$CM_BUILD_DIR/signing.env"
-          ARCHIVE=$(find "$CM_BUILD_DIR/build" -maxdepth 5 -name "*.xcarchive" | head -n 1)
-          if [ -z "$ARCHIVE" ]; then
-            echo "✗ 找不到 .xcarchive，無法上傳"
-            exit 1
-          fi
-          echo "Archive: $ARCHIVE"
+          
+          # 建立標準的 exportOptions.plist 供自動打包使用
+          cat > "$CM_BUILD_DIR/exportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>teamID</key>
+              <string>$TEAM_ID</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>$BUNDLE_ID</key>
+                  <string>$PROFILE_UUID</string>
+              </dict>
+          </dict>
+          </plist>
+          PLIST
 
-          mkdir -p ~/.private_keys
-          printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
-          chmod 600 ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
-
-          # 使用 Python 安全地產生格式正確的 exportOptions plist
-          python3 -c "
-          import plistlib
-          plist_data = {
-              'method': 'app-store-connect',
-              'teamID': '$TEAM_ID',
-              'signingStyle': 'manual',
-              'destination': 'upload',
-              'provisioningProfiles': {'$BUNDLE_ID': '$PROFILE_UUID'}
-          }
-          with open('$CM_BUILD_DIR/upload.plist', 'wb') as f:
-              plistlib.dump(plist_data, f)
-          "
-
-          xcodebuild -exportArchive \
-            -archivePath "$ARCHIVE" \
-            -exportOptionsPlist "$CM_BUILD_DIR/upload.plist" \
-            -authenticationKeyPath ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8 \
-            -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
-      - name: 自動提交審核
-        script: |
-          set -e
-          EXTRA=""
-          if [ "$SUBMIT_DRY_RUN" = "true" ]; then EXTRA="--dry-run"; fi
-          python3 tools/asc_submit.py \
-            --bundle-id "$BUNDLE_ID" \
-            --version "$VERSION_STRING" \
-            --key ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8 \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --copyright "$COPYRIGHT" \
-            $EXTRA
+          # 開始打包
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME" \
+            --export-options-plist "$CM_BUILD_DIR/exportOptions.plist"
     artifacts:
       - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: true
+        cancel_previous_submissions: true
+        release_type: MANUAL
 
   # ============================================================
   # 2) 備援：全手動 xcodebuild
