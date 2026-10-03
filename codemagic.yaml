@@ -8,7 +8,7 @@ workflows:
         distribution_type: app_store
         bundle_identifier: com.lightvlcl.2048Chinses2026
     scripts:
-      - name: 穩健手動簽署打包流程（絕對路徑修正版）
+      - name: 穩健手動簽署打包流程（含憑證對齊檢測）
         script: |
           set -e
 
@@ -18,27 +18,38 @@ workflows:
             unzip -o ios.zip
           fi
 
+          # 自動將實際檔名對應重新命名為標準名稱
           if [ -f "ios/cert/2048_distribution_cert.p12" ]; then
             mv ios/cert/2048_distribution_cert.p12 ios/cert/distribution.p12
+            echo "✅ 已將憑證重新命名為 distribution.p12"
           fi
 
           if [ -f "ios/cert/2048_AppStore_Profile.mobileprovision" ]; then
             mv ios/cert/2048_AppStore_Profile.mobileprovision ios/cert/profile.mobileprovision
+            echo "✅ 已將描述檔重新命名為 profile.mobileprovision"
           fi
 
           CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
           PROFILE_PATH=$(find . -name "profile.mobileprovision" | head -n 1)
+          echo "✅ 定位憑證路徑: $CERT_PATH"
+          echo "✅ 定位描述檔路徑: $PROFILE_PATH"
 
-          # 2. 安裝 npm 依賴與 AdMob 升級
+          # 2. 安裝 npm 依賴
+          echo "=== 正在安裝 npm 依賴套件 ==="
           npm install
+
+          # 2.1 自動將 AdMob 升級至最新版本
+          echo "=== 正在升級 @capacitor-community/admob 至最新版本 ==="
           npm install @capacitor-community/admob@latest
 
-          # 3. 初始化鑰匙圈並匯入憑證
+          # 3. 初始化鑰匙圈並匯入 p12 憑證
           keychain initialize
           DEFAULT_KEYCHAIN=$(keychain get-default)
+          echo "=== 正在使用密碼匯入 p12 憑證到鑰匙圈 ==="
           security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "zFIWXMyv" -A -T /usr/bin/codesign
 
-          # 4. 安裝行動描述檔並自動分析 UUID 與分發類型
+          # 4. 安裝行動描述檔到系統指定目錄並取得 UUID 與授權憑證清單
+          echo "=== 正在安裝與分析行動描述檔 ==="
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
 
           PROFILE_INFO=$(python3 -c '
@@ -62,19 +73,26 @@ workflows:
               print(f"UUID:{uuid}")
               print(f"METHOD:{method}")
           except Exception as e:
+              print(f"ERROR:{e}", file=sys.stderr)
               sys.exit(1)
           ' "$PROFILE_PATH")
 
           PROVISIONING_PROFILE_UUID=$(echo "$PROFILE_INFO" | grep "UUID:" | cut -d':' -f2)
           EXPORT_METHOD=$(echo "$PROFILE_INFO" | grep "METHOD:" | cut -d':' -f2)
 
+          echo "🔑 成功取得描述檔 UUID: $PROVISIONING_PROFILE_UUID"
+          echo "📦 自動判定打包分發類型 (Export Method): $EXPORT_METHOD"
+
           cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
 
-          # 5. 同步 Capacitor iOS 專案與 Podfile 修正
+          # 5. 同步 Capacitor iOS 專案
           if [ ! -d "ios/App" ]; then
+            echo "=== 正在自動補齊 iOS 平台專案 ==="
             npx cap add ios
           fi
 
+          # 5.0 提前強制將 Podfile 平台版本設為 15.0
+          echo "=== 正在調整 iOS 部署版本目標為 15.0 ==="
           python3 -c '
           podfile_path = "ios/App/Podfile"
           try:
@@ -84,12 +102,15 @@ workflows:
               content = re.sub(r"platform :ios, \x27[0-9.]+\x27", "platform :ios, \x2715.0\x27", content)
               with open(podfile_path, "w") as f:
                   f.write(content)
+              print("✅ Podfile 平台版本已確保為 15.0")
           except Exception as e:
-              pass
+              print("⚠️ 調整 Podfile 平台版本略過:", e)
           '
 
           npx cap sync ios
 
+          # 5.1 自動將關閉 Pods 簽署邏輯與部署版本鎖定注入現有的 Podfile post_install 中
+          echo "=== 正在調整 Podfile 以關閉 Pods 簽署並設定 deployment target ==="
           python3 -c '
           podfile_path = "ios/App/Podfile"
           with open(podfile_path, "r") as f:
@@ -98,9 +119,9 @@ workflows:
           signing_code = """
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
-                config.build_settings[\"CODE_SIGNING_ALLOWED\"] = \"NO\"
-                config.build_settings[\"CODE_SIGNING_REQUIRED\"] = \"NO\"
-                config.build_settings[\"IPHONEOS_DEPLOYMENT_TARGET\"] = \"15.0\"
+                config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
+                config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
+                config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "15.0"
               end
             end
           """
@@ -108,22 +129,30 @@ workflows:
           if "CODE_SIGNING_ALLOWED" not in content:
               if "post_install do |installer|" in content:
                   content = content.replace("post_install do |installer|", "post_install do |installer|" + signing_code)
+                  print("✅ 已將簽署關閉與版本鎖定邏輯注入現有的 post_install 中")
               else:
                   content += "\npost_install do |installer|\n" + signing_code + "\nend\n"
+                  print("✅ 已新增 post_install 區塊")
               with open(podfile_path, "w") as f:
                   f.write(content)
+          else:
+              print("ℹ️ Podfile 已包含簽署關閉設定")
           '
 
+          # 重新執行 pod install 使 Podfile 修改生效
           cd ios/App
           pod install
           cd ../..
 
-          # 6. 修正 Bundle ID
+          # 6. 自動修正 Info.plist 與專案檔內的 Bundle ID
+          echo "=== 正在全面修正 Bundle ID ==="
           plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
 
-          # 7. 設定主專案手動簽署與 15.0 部署版本
+          # 7. 進入 iOS 專案目錄並設定主專案手動簽署與部署目標 15.0
           cd ios/App
+          echo "=== 正在設定主專案手動簽署與升級部署版本至 15.0 ==="
+
           python3 -c '
           import sys, re
           pbxproj_path = "App.xcodeproj/project.pbxproj"
@@ -132,32 +161,28 @@ workflows:
           team_id = "58RATT4ABA"
           content = re.sub(r"DevelopmentTeam = \"([^\"]*)\";", f"DevelopmentTeam = \"{team_id}\";", content)
           content = re.sub(r"CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;", content)
+          # 強制將主專案的 IPHONEOS_DEPLOYMENT_TARGET 提升至 15.0
           content = re.sub(r"IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;", "IPHONEOS_DEPLOYMENT_TARGET = 15.0;", content)
           with open(pbxproj_path, "w") as f:
               f.write(content)
+          print("✅ 主專案手動簽署與 IPHONEOS_DEPLOYMENT_TARGET = 15.0 設定完成")
           '
 
-          # 取得專案根目錄與 ios/App 的絕對路徑
-          PROJECT_ROOT="$(pwd)/../.."
-          IOS_APP_DIR="$(pwd)"
-          ARCHIVE_PATH="$IOS_APP_DIR/build/App.xcarchive"
-
-          echo "=== 開始進行 Archive 打包 (絕對路徑: $ARCHIVE_PATH) ==="
-          mkdir -p build
+          # 8. 執行 Archive 打包
+          echo "=== 開始進行 Archive 打包 (Manual Signing) ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
-                     -archivePath "$ARCHIVE_PATH" \
+                     archive -archivePath build/App.xcarchive \
                      CODE_SIGN_STYLE=Manual \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_IDENTITY="Apple Distribution" \
                      PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" \
                      CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
                      -allowProvisioningUpdates
-          cd "$PROJECT_ROOT"
 
-          # 9. 建立 exportOptions.plist
+          # 9. 建立動態適應的 exportOptions.plist
           echo "=== 正在建立 exportOptions.plist ==="
           python3 -c '
           import plistlib, os
@@ -174,15 +199,15 @@ workflows:
               plistlib.dump(data, f)
           '
 
-          # 10. 匯出 .ipa 檔案 (使用相同的絕對路徑讀取)
+          # 10. 正在匯出 .ipa 檔案
           echo "=== 正在匯出 .ipa 檔案 ==="
-          mkdir -p build_output
+          mkdir -p ../../build_output
           xcodebuild -exportArchive \
-                     -archivePath "$ARCHIVE_PATH" \
+                     -archivePath build/App.xcarchive \
                      -exportOptionsPlist exportOptions.plist \
-                     -exportPath build_output
+                     -exportPath ../../build_output
 
-          echo "🎉 恭喜！打包與 .ipa 匯出成功完成！"
+          echo "🎉 打包流程大功告成！"
 
     artifacts:
       - build_output/*.ipa
