@@ -162,7 +162,7 @@ workflows:
         release_type: MANUAL
 
   # ============================================================
-  # 1.8) 全自動上架（改用指令碼與 .p8 金鑰直接上傳，不依賴網頁端整合）
+  # 1.8) 全自動上架（使用環境變數中的 ios_keys 進行智慧格式判斷與命令列上傳）
   # ============================================================
   ios-auto-release:
     name: ③ 全自動：打包 → 上傳 → 送審
@@ -222,8 +222,17 @@ workflows:
           echo "找到 IPA: $IPA_PATH"
 
           mkdir -p ~/.private_keys
-          printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
-          chmod 600 ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
+          KEY_PATH="$HOME/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8"
+
+          # 智慧判斷：支援純文字直接貼上或 Base64 編碼
+          if echo "$APP_STORE_CONNECT_PRIVATE_KEY" | grep -q "BEGIN PRIVATE KEY"; then
+            echo "偵測到純文字 PEM 格式，直接寫入..."
+            echo "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_PATH"
+          else
+            echo "偵測到 Base64 編碼，正在解碼..."
+            echo "$APP_STORE_CONNECT_PRIVATE_KEY" | base64 --decode > "$KEY_PATH"
+          fi
+          chmod 600 "$KEY_PATH"
 
           echo "=== 開始透過 altool 上傳到 App Store Connect ==="
           xcrun altool --upload-app \
