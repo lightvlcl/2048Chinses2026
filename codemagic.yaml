@@ -7,6 +7,8 @@ workflows:
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.lightvlcl.2048Chinses2026
+    integrations:
+      app_store_connect: Codemagic ASC API  # 這裡請填入你在 Codemagic 後台 Integrations 設定的 API Key 名稱
     scripts:
       - name: 穩健手動簽署打包流程（1-10步）
         script: |
@@ -169,6 +171,8 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+        # 也可以選擇指定群組或自動送審（選填）
+        # beta_groups: ['Default external group']
 
     artifacts:
       - build_output/*.ipa
