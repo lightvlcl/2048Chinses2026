@@ -162,7 +162,7 @@ workflows:
         release_type: MANUAL
 
   # ============================================================
-  # 1.8) 全自動上架（改用 Codemagic 內建發布通道，避開 p8 驗證錯誤）
+  # 1.8) 全自動上架（改用指令碼與 .p8 金鑰直接上傳，不依賴網頁端整合）
   # ============================================================
   ios-auto-release:
     name: ③ 全自動：打包 → 上傳 → 送審
@@ -177,19 +177,16 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-    integrations:
-      app_store_connect: Codemagic
     scripts:
       - *unpack
       - *deps
       - *certs
       - *use_profiles
-      - name: 打包 IPA (自動產生相容的 ExportOptions)
+      - name: 打包 IPA
         script: |
           set -e
           . "$CM_BUILD_DIR/signing.env"
           
-          # 建立標準的 exportOptions.plist 供自動打包使用
           cat > "$CM_BUILD_DIR/exportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -210,20 +207,32 @@ workflows:
           </plist>
           PLIST
 
-          # 開始打包
           xcode-project build-ipa \
             --workspace "$XCODE_WORKSPACE" \
             --scheme "$XCODE_SCHEME" \
             --export-options-plist "$CM_BUILD_DIR/exportOptions.plist"
+      - name: 使用 .p8 金鑰上傳至 App Store Connect
+        script: |
+          set -e
+          IPA_PATH=$(find build/ios/ipa -name "*.ipa" | head -n 1)
+          if [ -z "$IPA_PATH" ]; then
+            echo "✗ 找不到產出的 IPA 檔案"
+            exit 1
+          fi
+          echo "找到 IPA: $IPA_PATH"
+
+          mkdir -p ~/.private_keys
+          printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
+          chmod 600 ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
+
+          echo "=== 開始透過 altool 上傳到 App Store Connect ==="
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA_PATH" \
+            --apiKey "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
     artifacts:
       - build/ios/ipa/*.ipa
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        submit_to_app_store: true
-        cancel_previous_submissions: true
-        release_type: MANUAL
 
   # ============================================================
   # 2) 備援：全手動 xcodebuild
