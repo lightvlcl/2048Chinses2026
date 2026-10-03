@@ -172,7 +172,7 @@ workflows:
       node: v22
       xcode: latest
       groups:
-        - ios_keys   # 👈 已對應您後台建立的環境變數群組
+        - ios_keys
       vars:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
@@ -201,15 +201,19 @@ workflows:
           printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
           chmod 600 ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
 
-          cat > "$CM_BUILD_DIR/upload.plist" <<PLIST
-          {
-            "method": "app-store-connect",
-            "teamID": "$TEAM_ID",
-            "signingStyle": "manual",
-            "destination": "upload",
-            "provisioningProfiles": { "$BUNDLE_ID": "$PROFILE_UUID" }
+          # 使用 Python 安全地產生格式正確的 exportOptions plist
+          python3 -c "
+          import plistlib
+          plist_data = {
+              'method': 'app-store-connect',
+              'teamID': '$TEAM_ID',
+              'signingStyle': 'manual',
+              'destination': 'upload',
+              'provisioningProfiles': {'$BUNDLE_ID': '$PROFILE_UUID'}
           }
-          PLIST
+          with open('$CM_BUILD_DIR/upload.plist', 'wb') as f:
+              plistlib.dump(plist_data, f)
+          "
 
           xcodebuild -exportArchive \
             -archivePath "$ARCHIVE" \
