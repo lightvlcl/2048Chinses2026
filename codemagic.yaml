@@ -1,192 +1,370 @@
+# ============================================================
+# 2048新中版 —— Codemagic 雲端建置設定
+# 全程免 Mac：codemagic.io 網頁端觸發 → 雲上 Mac 打包 → 產 .ipa
+# ============================================================
+
+definitions:
+  scripts:
+    # ---------- 共用步驟 ----------
+    - &unpack
+      name: 解壓縮 iOS 工程與憑證包
+      script: |
+        set -e
+        if [ -f ios.zip ]; then
+          echo "=== 解壓縮 ios.zip ==="
+          unzip -o -q ios.zip
+        fi
+        # 修掉雙重副檔名
+        if [ -f ios/cert/distribution.p12.p12 ]; then
+          mv ios/cert/distribution.p12.p12 ios/cert/distribution.p12
+        fi
+        ls -la ios/cert/
+
+    - &deps
+      name: 安裝 npm 依賴 + Capacitor 同步（含 pod install）
+      script: |
+        set -e
+        npm install
+        if [ ! -d ios/App ]; then
+          echo "=== 補齊 iOS 平台 ==="
+          npx cap add ios
+        fi
+        npx cap sync ios
+
+    - &certs
+      name: 匯入 p12 憑證與行動描述檔
+      script: |
+        set -e
+        CERT_PATH=$(find . -name "distribution.p12" -not -path "*/node_modules/*" | head -n 1)
+        PROFILE_PATH=$(find . -name "profile.mobileprovision" -not -path "*/node_modules/*" | head -n 1)
+        if [ -z "$CERT_PATH" ] || [ -z "$PROFILE_PATH" ]; then
+          echo "找不到憑證或描述檔，請確認 ios/cert/ 已提交到倉庫"
+          exit 1
+        fi
+        echo "憑證: $CERT_PATH"
+        echo "描述檔: $PROFILE_PATH"
+
+        # p12 密碼：優先用 Codemagic 加密環境變數 P12_PASSWORD
+        P12_PASSWORD="${P12_PASSWORD:-zFIWXMyv}"
+
+        echo "=== 初始化 keychain 並匯入憑證 ==="
+        keychain initialize
+        keychain add-certificates --certificate "$CERT_PATH" --password "$P12_PASSWORD" \
+          || security import "$CERT_PATH" -k "$(keychain get-default)" -P "$P12_PASSWORD" -A -T /usr/bin/codesign
+
+        echo "=== 安裝描述檔 ==="
+        mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+        python3 - "$PROFILE_PATH" > "$CM_BUILD_DIR/signing.env" <<'PY'
+        import plistlib, sys
+        data = open(sys.argv[1], "rb").read()
+        start = data.index(b"<?xml")
+        end = data.rindex(b"</plist>") + len(b"</plist>")
+        p = plistlib.loads(data[start:end])
+        print('PROFILE_UUID="%s"' % p["UUID"])
+        print('TEAM_ID="%s"' % p["TeamIdentifier"][0])
+        print('PROFILE_NAME="%s"' % p.get("Name", ""))
+        PY
+        . "$CM_BUILD_DIR/signing.env"
+        echo "描述檔 UUID: $PROFILE_UUID"
+        echo "Team ID: $TEAM_ID"
+        cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROFILE_UUID.mobileprovision"
+        echo "CERT_PATH=\"$CERT_PATH\"" >> "$CM_BUILD_DIR/signing.env"
+
+    - &use_profiles
+      name: Codemagic 套用簽署設定
+      script: |
+        set -e
+        . "$CM_BUILD_DIR/signing.env"
+        xcode-project use-profiles \
+          --workspace "$XCODE_WORKSPACE" \
+          --bundle-id "$BUNDLE_ID" \
+          || xcode-project use-profiles
+
+    - &build_ipa
+      name: 打包 IPA
+      script: |
+        set -e
+        xcode-project build-ipa \
+          --workspace "$XCODE_WORKSPACE" \
+          --scheme "$XCODE_SCHEME"
+
 workflows:
-  ios-build-workflow:
-    name: 2048 iOS Build
-    max_build_duration: 60
+  # ============================================================
+  # 1) 主線：Codemagic 原生簽署工具
+  # ============================================================
+  ios-release:
+    name: ① 打包 → TestFlight
     instance_type: mac_mini_m2
+    max_build_duration: 60
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.lightvlcl.2048Chinses2026
+      node: v22
+      xcode: latest
+      vars:
+        BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+    integrations:
+      app_store_connect: Codemagic
     scripts:
-      - name: 穩健手動簽署打包與自動上傳 TestFlight
+      - *unpack
+      - *deps
+      - *certs
+      - *use_profiles
+      - *build_ipa
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
+
+  # ============================================================
+  # 1.5) 直送審核
+  # ============================================================
+  ios-submit-store:
+    name: ② 打包 → 直接送審上架
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: v22
+      xcode: latest
+      vars:
+        BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+    integrations:
+      app_store_connect: Codemagic
+    scripts:
+      - *unpack
+      - *deps
+      - *certs
+      - *use_profiles
+      - *build_ipa
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: true
+        cancel_previous_submissions: true
+        release_type: MANUAL
+
+  # ============================================================
+  # 1.8) 全自動上架（使用 .p8 私鑰，內建 chmod 600 與精準寫入防錯）
+  # ============================================================
+  ios-auto-release:
+    name: ③ 全自動：打包 → 上傳 → 送審
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: v22
+      xcode: latest
+      vars:
+        BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        VERSION_STRING: "1.0.0"
+        COPYRIGHT: "2026 lightvlcl"
+        SUBMIT_DRY_RUN: "true"
+    scripts:
+      - *unpack
+      - *deps
+      - *certs
+      - *use_profiles
+      - *build_ipa
+      - name: 上傳二進位到 App Store Connect
         script: |
           set -e
+          . "$CM_BUILD_DIR/signing.env"
+          ARCHIVE=$(find "$CM_BUILD_DIR/build" -maxdepth 5 -name "*.xcarchive" | head -n 1)
+          if [ -z "$ARCHIVE" ]; then
+            echo "✗ 找不到 .xcarchive，無法上傳"
+            exit 1
+          fi
+          echo "Archive: $ARCHIVE"
 
-          # 1. 自動解壓縮憑證包
+          mkdir -p ~/.private_keys
+
+          # 透過 Python 精準寫入 .p8 私鑰，避免縮排空白造成的 401 錯誤
+          python3 -c '
+          p8_content = "-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQguckiA9PXkv0mW5VD\nwmdLVk+2QLqbsqpU51i0vgyiyuqgCgYIKoZIzj0DAQehRANCAAS03fXpwRNSsstE\n88XhBvKc5vrp7v/nzjpgCNC75h4HITEqeiNOjD3IikAS1ALTnI72zFezYjRMgNU/\n8WzhEPNH\n-----END PRIVATE KEY-----\n"
+          import os
+          path = os.path.expanduser(f"~/.private_keys/AuthKey_{os.environ[\"ASC_KEY_ID\"]}.p8")
+          with open(path, "w") as f:
+              f.write(p8_content)
+          '
+
+          # 強制設定 600 權限，避免 Apple altool 報 401
+          chmod 600 ~/.private_keys/AuthKey_"$ASC_KEY_ID".p8
+
+          cat > "$CM_BUILD_DIR/upload.plist" <<PLIST
+          {
+            "method": "app-store-connect",
+            "teamID": "$TEAM_ID",
+            "signingStyle": "manual",
+            "destination": "upload",
+            "provisioningProfiles": { "$BUNDLE_ID": "$PROFILE_UUID" }
+          }
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE" \
+            -exportOptionsPlist "$CM_BUILD_DIR/upload.plist" \
+            -authenticationKeyPath ~/.private_keys/AuthKey_"$ASC_KEY_ID".p8 \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+      - name: 自動提交審核
+        script: |
+          set -e
+          EXTRA=""
+          if [ "$SUBMIT_DRY_RUN" = "true" ]; then EXTRA="--dry-run"; fi
+          python3 tools/asc_submit.py \
+            --bundle-id "$BUNDLE_ID" \
+            --version "$VERSION_STRING" \
+            --key ~/.private_keys/AuthKey_"$ASC_KEY_ID".p8 \
+            --key-id "$ASC_KEY_ID" \
+            --issuer-id "$ASC_ISSUER_ID" \
+            --copyright "$COPYRIGHT" \
+            $EXTRA
+    artifacts:
+      - build/ios/ipa/*.ipa
+
+  # ============================================================
+  # 2) 備援：全手動 xcodebuild
+  # ============================================================
+  ios-release-manual:
+    name: iOS Release Workflow（手動簽署）
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: v22
+      xcode: latest
+      vars:
+        BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
+        TEAM_ID: "58RATT4ABA"
+    scripts:
+      - name: 穩健手動簽署打包流程
+        script: |
+          #!/usr/bin/env bash
+          set -e
+
           if [ -f "ios.zip" ]; then
             echo "=== 正在解壓縮 ios.zip ==="
             unzip -o ios.zip
           fi
 
-          if [ -f "ios/cert/2048_distribution_cert.p12" ]; then
-            mv ios/cert/2048_distribution_cert.p12 ios/cert/distribution.p12
+          if [ -f "ios/cert/distribution.p12.p12" ]; then
+            mv ios/cert/distribution.p12.p12 ios/cert/distribution.p12
           fi
 
-          if [ -f "ios/cert/2048_AppStore_Profile.mobileprovision" ]; then
-            mv ios/cert/2048_AppStore_Profile.mobileprovision ios/cert/profile.mobileprovision
+          CERT_PATH=$(find . -name "distribution.p12" -not -path "*/node_modules/*" | head -n 1)
+          PROFILE_PATH=$(find . -name "profile.mobileprovision" -not -path "*/node_modules/*" | head -n 1)
+          if [ -z "$CERT_PATH" ] || [ -z "$PROFILE_PATH" ]; then
+            echo "找不到憑證或描述檔"
+            exit 1
           fi
 
-          CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
-          PROFILE_PATH=$(find . -name "profile.mobileprovision" | head -n 1)
-
-          # 2. 安裝 npm 依賴與 AdMob 升級
           npm install
-          npm install @capacitor-community/admob@latest
 
-          # 3. 初始化鑰匙圈並匯入 p12 憑證
           keychain initialize
           DEFAULT_KEYCHAIN=$(keychain get-default)
-          security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "zFIWXMyv" -A -T /usr/bin/codesign
+          P12_PASSWORD="${P12_PASSWORD:-zFIWXMyv}"
+          security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "$P12_PASSWORD" -A -T /usr/bin/codesign
 
-          # 4. 安裝行動描述檔並自動分析 UUID
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-
-          PROFILE_INFO=$(python3 -c '
+          PROVISIONING_PROFILE_UUID=$(python3 -c '
           import plistlib, sys
-          try:
-              with open(sys.argv[1], "rb") as f:
-                  content = f.read()
-              start = content.index(b"<?xml")
-              end = content.rindex(b"</plist>") + len(b"</plist>")
-              plist_data = plistlib.loads(content[start:end])
-              uuid = plist_data.get("UUID", "")
-              print(f"UUID:{uuid}")
-          except Exception as e:
-              sys.exit(1)
+          with open(sys.argv[1], "rb") as f:
+              content = f.read()
+          start = content.index(b"<?xml")
+          end = content.rindex(b"</plist>") + len(b"</plist>")
+          print(plistlib.loads(content[start:end])["UUID"])
           ' "$PROFILE_PATH")
 
-          PROVISIONING_PROFILE_UUID=$(echo "$PROFILE_INFO" | grep "UUID:" | cut -d':' -f2)
           cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
 
-          # 5. 同步 Capacitor 與 Podfile 修正
           if [ ! -d "ios/App" ]; then
             npx cap add ios
           fi
 
-          python3 -c '
-          podfile_path = "ios/App/Podfile"
-          try:
-              with open(podfile_path, "r") as f:
-                  content = f.read()
-              import re
-              content = re.sub(r"platform :ios, \x27[0-9.]+\x27", "platform :ios, \x2715.0\x27", content)
-              with open(podfile_path, "w") as f:
-                  f.write(content)
-          except Exception as e:
-              pass
-          '
-
           npx cap sync ios
 
-          python3 -c '
-          podfile_path = "ios/App/Podfile"
-          with open(podfile_path, "r") as f:
-              content = f.read()
+          plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" ios/App/App/Info.plist
+          find ios/App -name "project.pbxproj" -exec sed -i '' "s/com.yourname.game2048/$BUNDLE_ID/g" {} +
 
-          signing_code = """
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings[\"CODE_SIGNING_ALLOWED\"] = \"NO\"
-                config.build_settings[\"CODE_SIGNING_REQUIRED\"] = \"NO\"
-                config.build_settings[\"IPHONEOS_DEPLOYMENT_TARGET\"] = \"15.0\"
-              end
-            end
-          """
-
-          if "CODE_SIGNING_ALLOWED" not in content:
-              if "post_install do |installer|" in content:
-                  content = content.replace("post_install do |installer|", "post_install do |installer|" + signing_code)
-              else:
-                  content += "\npost_install do |installer|\n" + signing_code + "\nend\n"
-              with open(podfile_path, "w") as f:
-                  f.write(content)
-          '
+          python3 "$CM_BUILD_DIR/tools/fix_ios_signing.py" \
+            --app "$CM_BUILD_DIR/ios/App/App.xcodeproj/project.pbxproj" \
+            --pods "$CM_BUILD_DIR/ios/App/Pods/Pods.xcodeproj/project.pbxproj" \
+            --bundle-id "$BUNDLE_ID" \
+            --team "$TEAM_ID" \
+            --identity "Apple Distribution" \
+            --profile "$PROVISIONING_PROFILE_UUID"
 
           cd ios/App
-          pod install
-          cd ../..
-
-          # 6. 修正 Bundle ID
-          plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
-          find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
-
-          # 7. 設定主專案手動簽署與 15.0 部署版本
-          cd ios/App
-          python3 -c '
-          import sys, re
-          pbxproj_path = "App.xcodeproj/project.pbxproj"
-          with open(pbxproj_path, "r") as f:
-              content = f.read()
-          team_id = "58RATT4ABA"
-          content = re.sub(r"DevelopmentTeam = \"([^\"]*)\";", f"DevelopmentTeam = \"{team_id}\";", content)
-          content = re.sub(r"CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;", content)
-          content = re.sub(r"IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;", "IPHONEOS_DEPLOYMENT_TARGET = 15.0;", content)
-          with open(pbxproj_path, "w") as f:
-              f.write(content)
-          '
-
-          # 8. 執行 Archive 打包
-          echo "=== 開始進行 Archive 打包 ==="
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
-                     archive -archivePath build/App.xcarchive \
-                     CODE_SIGN_STYLE=Manual \
-                     DEVELOPMENT_TEAM="58RATT4ABA" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" \
-                     CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
-                     -allowProvisioningUpdates
+                     -destination "generic/platform=iOS" \
+                     clean archive \
+                     -archivePath "$CM_BUILD_DIR/build/App.xcarchive"
 
-          # 9. 建立 exportOptions.plist
-          echo "=== 正在建立 exportOptions.plist ==="
-          python3 -c '
-          import plistlib
-          data = {
-              "method": "app-store",
-              "teamID": "58RATT4ABA",
-              "signingStyle": "manual",
-              "provisioningProfiles": {
-                  "com.lightvlcl.2048Chinses2026": "'"$PROVISIONING_PROFILE_UUID"'"
-              }
-          }
-          with open("exportOptions.plist", "wb") as f:
-              plistlib.dump(data, f)
-          '
+          python3 "$CM_BUILD_DIR/tools/make_export_options.py" \
+            --bundle-id "$BUNDLE_ID" \
+            --profile-file "$CM_BUILD_DIR/$PROFILE_PATH" \
+            --out "$CM_BUILD_DIR/exportOptions.plist"
 
-          # 10. 匯出 .ipa 檔案
-          echo "=== 正在匯出 .ipa 檔案 ==="
-          mkdir -p ../../build_output
           xcodebuild -exportArchive \
-                     -archivePath build/App.xcarchive \
-                     -exportOptionsPlist exportOptions.plist \
-                     -exportPath ../../build_output
-
-          # 11. 透過 Python 精準寫入 .p8 私鑰、設定 600 權限並上傳至 TestFlight
-          echo "=== 正在配置 .p8 私鑰並上傳至 TestFlight ==="
-          mkdir -p ~/.private_keys
-
-          python3 -c '
-          p8_content = "-----BEGIN PRIVATE KEY-----\nMIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQguckiA9PXkv0mW5VD\nwmdLVk+2QLqbsqpU51i0vgyiyuqgCgYIKoZIzj0DAQehRANCAAS03fXpwRNSsstE\n88XhBvKc5vrp7v/nzjpgCNC75h4HITEqeiNOjD3IikAS1ALTnI72zFezYjRMgNU/\n8WzhEPNH\n-----END PRIVATE KEY-----\n"
-          import os
-          path = os.path.expanduser("~/.private_keys/AuthKey_3N8266W3MT.p8")
-          with open(path, "w") as f:
-              f.write(p8_content)
-          '
-
-          chmod 600 ~/.private_keys/AuthKey_3N8266W3MT.p8
-
-          IPA_PATH=$(find ../../build_output -name "*.ipa" | head -n 1)
-
-          echo "🚀 執行 xcrun altool 上傳至 TestFlight..."
-          xcrun altool --upload-app \
-            --type ios \
-            --file "$IPA_PATH" \
-            --apiKey "3N8266W3MT" \
-            --apiIssuer "0b40cc93-4f2b-435d-8ba3-e59e0221e1f0"
-
-          echo "🎉 恭喜！App 已成功打包並自動上傳至 TestFlight！"
-
+                     -archivePath "$CM_BUILD_DIR/build/App.xcarchive" \
+                     -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
+                     -exportPath "$CM_BUILD_DIR/build_output"
     artifacts:
       - build_output/*.ipa
+    integrations:
+      app_store_connect: Codemagic
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
+
+  # ============================================================
+  # 3) Google Play
+  # ============================================================
+  android-release:
+    name: 2048 Android Release
+    instance_type: linux
+    max_build_duration: 60
+    environment:
+      node: v22
+      java_version: 21
+      groups:
+        - android_credentials
+    scripts:
+      - name: Install dependencies
+        script: npm install
+      - name: Prepare Android project
+        script: |
+          if [ ! -d android ]; then npx cap add android; fi
+          npx cap sync android
+      - name: Set up keystore
+        script: |
+          echo "$CM_KEYSTORE" | base64 --decode > "$CM_BUILD_DIR/android/app/upload-keystore.jks"
+          cat > "$CM_BUILD_DIR/android/key.properties" <<EOF
+          storeFile=upload-keystore.jks
+          storePassword=$CM_KEYSTORE_PASSWORD
+          keyAlias=$CM_KEY_ALIAS
+          keyPassword=$CM_KEY_ALIAS_PASSWORD
+          EOF
+      - name: Build signed AAB
+        script: |
+          cd android && ./gradlew bundleRelease
+    artifacts:
+      - android/app/build/outputs/**/*.aab
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true
