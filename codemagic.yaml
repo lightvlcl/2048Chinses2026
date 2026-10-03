@@ -4,11 +4,14 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     environment:
+      vars:
+        # 如果你有在 Codemagic 環境變數設定 APP_STORE_CONNECT_API_KEY，也可以在這裡對應或直接讀取
+          app_store_connect_identifier: "" # 選填
       ios_signing:
         distribution_type: app_store
         bundle_identifier: com.lightvlcl.2048Chinses2026
     scripts:
-      - name: 穩健手動簽署打包流程（含憑證對齊檢測）
+      - name: 穩健手動簽署打包流程（含憑證對齊檢測與自動上傳）
         script: |
           set -e
 
@@ -174,7 +177,7 @@ workflows:
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
-                     archive -archivePath build/App.xcarchive \
+                     -archivePath build/App.xcarchive \
                      CODE_SIGN_STYLE=Manual \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_IDENTITY="Apple Distribution" \
@@ -207,7 +210,12 @@ workflows:
                      -exportOptionsPlist exportOptions.plist \
                      -exportPath ../../build_output
 
-          echo "🎉 打包流程大功告成！"
+          # 11. 自動上傳至 App Store Connect / TestFlight
+          echo "=== 正在將 .ipa 發布至 TestFlight ==="
+          app-store-connect publish \
+            --path "$(find ../../build_output -name "*.ipa" | head -n 1)"
+
+          echo "🎉 打包與自動上傳流程大功告成！"
 
     artifacts:
       - build_output/*.ipa
