@@ -1,178 +1,60 @@
 workflows:
   ios-build-workflow:
-    name: 2048 iOS Build
+    name: 穩健手動簽署打包流程與自動發布
     max_build_duration: 60
-    instance_type: mac_mini_m2
     environment:
+      groups:
+        - appstore_credentials # 如果有用到 App Store Connect API 金鑰群組可保留
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: com.lightvlcl.2048Chinses2026
-    integrations:
-      app_store_connect: Codemagic ASC API  # 這裡請填入你在 Codemagic 後台 Integrations 設定的 API Key 名稱
+        bundle_identifier: com.lightvl.2048Chinses2026
+      vars:
+        # 確保這裡不會有空白或格式錯誤的變數引起解析失敗
+        BUNDLE_ID: "com.lightvl.2048Chinses2026"
     scripts:
-      - name: 穩健手動簽署打包流程（1-10步）
+      - name: 1. 安裝專案依賴與同步
         script: |
-          set -e
-
-          # 1. 自動解壓縮憑證包
-          if [ -f "ios.zip" ]; then
-            echo "=== 正在解壓縮 ios.zip ==="
-            unzip -o ios.zip
-          fi
-
-          if [ -f "ios/cert/2048_distribution_cert.p12" ]; then
-            mv ios/cert/2048_distribution_cert.p12 ios/cert/distribution.p12
-          fi
-
-          if [ -f "ios/cert/2048_AppStore_Profile.mobileprovision" ]; then
-            mv ios/cert/2048_AppStore_Profile.mobileprovision ios/cert/profile.mobileprovision
-          fi
-
-          CERT_PATH=$(find . -name "distribution.p12" | head -n 1)
-          PROFILE_PATH=$(find . -name "profile.mobileprovision" | head -n 1)
-
-          # 2. 安裝 npm 依賴與 AdMob 升級
           npm install
-          npm install @capacitor-community/admob@latest
-
-          # 3. 初始化鑰匙圈並匯入憑證
-          keychain initialize
-          DEFAULT_KEYCHAIN=$(keychain get-default)
-          security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "zFIWXMyv" -A -T /usr/bin/codesign
-
-          # 4. 安裝行動描述檔並自動分析 UUID
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-
-          PROFILE_INFO=$(python3 -c '
-          import plistlib, sys
-          try:
-              with open(sys.argv[1], "rb") as f:
-                  content = f.read()
-              start = content.index(b"<?xml")
-              end = content.rindex(b"</plist>") + len(b"</plist>")
-              plist_data = plistlib.loads(content[start:end])
-              uuid = plist_data.get("UUID", "")
-              print(f"UUID:{uuid}")
-          except Exception as e:
-              sys.exit(1)
-          ' "$PROFILE_PATH")
-
-          PROVISIONING_PROFILE_UUID=$(echo "$PROFILE_INFO" | grep "UUID:" | cut -d':' -f2)
-          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
-
-          # 5. 同步 Capacitor 與 Podfile 修正
-          if [ ! -d "ios/App" ]; then
-            npx cap add ios
-          fi
-
-          python3 -c '
-          podfile_path = "ios/App/Podfile"
-          try:
-              with open(podfile_path, "r") as f:
-                  content = f.read()
-              import re
-              content = re.sub(r"platform :ios, \x27[0-9.]+\x27", "platform :ios, \x2715.0\x27", content)
-              with open(podfile_path, "w") as f:
-                  f.write(content)
-          except Exception as e:
-              pass
-          '
-
           npx cap sync ios
-
-          python3 -c '
-          podfile_path = "ios/App/Podfile"
-          with open(podfile_path, "r") as f:
-              content = f.read()
-
-          signing_code = """
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings[\"CODE_SIGNING_ALLOWED\"] = \"NO\"
-                config.build_settings[\"CODE_SIGNING_REQUIRED\"] = \"NO\"
-                config.build_settings[\"IPHONEOS_DEPLOYMENT_TARGET\"] = \"15.0\"
-              end
-            end
-          """
-
-          if "CODE_SIGNING_ALLOWED" not in content:
-              if "post_install do |installer|" in content:
-                  content = content.replace("post_install do |installer|", "post_install do |installer|" + signing_code)
-              else:
-                  content += "\npost_install do |installer|\n" + signing_code + "\nend\n"
-              with open(podfile_path, "w") as f:
-                  f.write(content)
-          '
-
+      - name: 2. 執行 CocoaPods 安裝
+        script: |
           cd ios/App
           pod install
-          cd ../..
-
-          # 6. 修正 Bundle ID
-          plutil -replace CFBundleIdentifier -string "com.lightvlcl.2048Chinses2026" ios/App/App/Info.plist
-          find ios/App -name "project.pbxproj" -exec sed -i '' 's/com.yourname.game2048/com.lightvlcl.2048Chinses2026/g' {} +
-
-          # 7. 設定主專案手動簽署與 15.0 部署版本
+      - name: 3. 初始化 Keychain 與匯入手動簽署資產
+        script: |
+          # 初始化 keychain
+          keychain initialize
+          
+          # 抓取並安裝你在 Codemagic 後台設定好的憑證與 Profile
+          # 這裡會對應到你在後台上傳的 2048-Distribution-Cert 與 2048-AppStore-Profile
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type APP_STORE \
+            --create
+          
+          # 將憑證加入 keychain
+          keychain add-certificates
+      - name: 4. 設定手動簽署並執行 Xcode 封存打包 (Archive)
+        script: |
           cd ios/App
-          python3 -c '
-          import sys, re
-          pbxproj_path = "App.xcodeproj/project.pbxproj"
-          with open(pbxproj_path, "r") as f:
-              content = f.read()
-          team_id = "58RATT4ABA"
-          content = re.sub(r"DevelopmentTeam = \"([^\"]*)\";", f"DevelopmentTeam = \"{team_id}\";", content)
-          content = re.sub(r"CODE_SIGN_STYLE = Automatic;", "CODE_SIGN_STYLE = Manual;", content)
-          content = re.sub(r"IPHONEOS_DEPLOYMENT_TARGET = [0-9.]+;", "IPHONEOS_DEPLOYMENT_TARGET = 15.0;", content)
-          with open(pbxproj_path, "w") as f:
-              f.write(content)
-          '
-
-          # 8. 執行 Archive 打包
-          echo "=== 開始進行 Archive 打包 ==="
+          
+          # 確保專案使用手動簽署並指定正確的 Team ID 與 Profile
           xcodebuild -workspace App.xcworkspace \
-                     -scheme App \
-                     -sdk iphoneos \
-                     -configuration Release \
-                     archive -archivePath build/App.xcarchive \
-                     CODE_SIGN_STYLE=Manual \
-                     DEVELOPMENT_TEAM="58RATT4ABA" \
-                     CODE_SIGN_IDENTITY="Apple Distribution" \
-                     PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" \
-                     CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
-                     -allowProvisioningUpdates
-
-          # 9. 建立 exportOptions.plist
-          echo "=== 正在建立 exportOptions.plist ==="
-          python3 -c '
-          import plistlib
-          data = {
-              "method": "app-store",
-              "teamID": "58RATT4ABA",
-              "signingStyle": "manual",
-              "provisioningProfiles": {
-                  "com.lightvlcl.2048Chinses2026": "'"$PROVISIONING_PROFILE_UUID"'"
-              }
-          }
-          with open("exportOptions.plist", "wb") as f:
-              plistlib.dump(data, f)
-          '
-
-          # 10. 匯出 .ipa 檔案
-          echo "=== 正在匯出 .ipa 檔案 ==="
-          mkdir -p ../../build_output
+            -scheme App \
+            -configuration Release \
+            -archivePath $HOME/build/App.xcarchive \
+            archive \
+            CODE_SIGN_STYLE="Manual" \
+            DEVELOPMENT_TEAM="58RATT4ABA" \
+            PROVISIONING_PROFILE_SPECIFIER="3681f918-217c-48cc-bf4c-8a6946fab114" \
+            CODE_SIGN_IDENTITY="Apple Distribution"
+      - name: 5. 匯出 IPA 檔案
+        script: |
+          # 從 .xcarchive 匯出最終的 .ipa 檔案
           xcodebuild -exportArchive \
-                     -archivePath build/App.xcarchive \
-                     -exportOptionsPlist exportOptions.plist \
-                     -exportPath ../../build_output
-
-          echo "🎉 打包與匯出成功！"
-
-    publishing:
-      app_store_connect:
-        auth: integration
-        submit_to_testflight: true
-        # 也可以選擇指定群組或自動送審（選填）
-        # beta_groups: ['Default external group']
-
+            -archivePath $HOME/build/App.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath $HOME/build/ios/ipa
     artifacts:
-      - build_output/*.ipa
+      - build/ios/ipa/*.ipa
+      - /Users/builder/Library/Developer/Xcode/DerivedData/**/Build/**/*.app
+      - /Users/builder/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
