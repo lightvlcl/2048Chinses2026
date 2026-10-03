@@ -162,7 +162,7 @@ workflows:
         release_type: MANUAL
 
   # ============================================================
-  # 1.8) 全自動上架（使用 .p8 私鑰）—— 已加入 asc_credentials 群組
+  # 1.8) 全自動上架（使用 .p8 私鑰）—— 已對應 ios_keys 群組
   # ============================================================
   ios-auto-release:
     name: ③ 全自動：打包 → 上傳 → 送審
@@ -172,7 +172,7 @@ workflows:
       node: v22
       xcode: latest
       groups:
-        - asc_credentials   # 👈 這裡已正確引入 .p8 私鑰相關變數
+        - ios_keys   # 👈 已對應您後台建立的環境變數群組
       vars:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
@@ -198,8 +198,8 @@ workflows:
           echo "Archive: $ARCHIVE"
 
           mkdir -p ~/.private_keys
-          printf '%s\n' "$ASC_PRIVATE_KEY" > ~/.private_keys/AuthKey_$ASC_KEY_ID.p8
-          chmod 600 ~/.private_keys/AuthKey_$ASC_KEY_ID.p8
+          printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" > ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
+          chmod 600 ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8
 
           cat > "$CM_BUILD_DIR/upload.plist" <<PLIST
           {
@@ -214,9 +214,9 @@ workflows:
           xcodebuild -exportArchive \
             -archivePath "$ARCHIVE" \
             -exportOptionsPlist "$CM_BUILD_DIR/upload.plist" \
-            -authenticationKeyPath ~/.private_keys/AuthKey_$ASC_KEY_ID.p8 \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+            -authenticationKeyPath ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8 \
+            -authenticationKeyID "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
       - name: 自動提交審核
         script: |
           set -e
@@ -225,9 +225,9 @@ workflows:
           python3 tools/asc_submit.py \
             --bundle-id "$BUNDLE_ID" \
             --version "$VERSION_STRING" \
-            --key ~/.private_keys/AuthKey_$ASC_KEY_ID.p8 \
-            --key-id "$ASC_KEY_ID" \
-            --issuer-id "$ASC_ISSUER_ID" \
+            --key ~/.private_keys/AuthKey_$APP_STORE_CONNECT_KEY_IDENTIFIER.p8 \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --copyright "$COPYRIGHT" \
             $EXTRA
     artifacts:
