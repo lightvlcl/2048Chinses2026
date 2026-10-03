@@ -168,13 +168,13 @@ workflows:
           print("✅ 主專案手動簽署與 IPHONEOS_DEPLOYMENT_TARGET = 15.0 設定完成")
           '
 
-          # 8. 執行 Archive 打包
+         # 8. 執行 Archive 打包 (明確指定路徑在 ios/App 內)
           echo "=== 開始進行 Archive 打包 (Manual Signing) ==="
-          xcodebuild -workspace App.xcworkspace \
+          xcodebuild -workspace ios/App/App.xcworkspace \
                      -scheme App \
                      -sdk iphoneos \
                      -configuration Release \
-                     -archivePath build/App.xcarchive \
+                     -archivePath ios/App/build/App.xcarchive \
                      CODE_SIGN_STYLE=Manual \
                      DEVELOPMENT_TEAM="58RATT4ABA" \
                      CODE_SIGN_IDENTITY="Apple Distribution" \
@@ -182,7 +182,7 @@ workflows:
                      CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION=YES \
                      -allowProvisioningUpdates
 
-          # 9. 建立動態適應的 exportOptions.plist
+          # 9. 建立動態適應的 exportOptions.plist (放於根目錄)
           echo "=== 正在建立 exportOptions.plist ==="
           python3 -c '
           import plistlib, os
@@ -201,16 +201,16 @@ workflows:
 
           # 10. 正在匯出 .ipa 檔案
           echo "=== 正在匯出 .ipa 檔案 ==="
-          mkdir -p ../../build_output
+          mkdir -p build_output
           xcodebuild -exportArchive \
-                     -archivePath build/App.xcarchive \
+                     -archivePath ios/App/build/App.xcarchive \
                      -exportOptionsPlist exportOptions.plist \
-                     -exportPath ../../build_output
+                     -exportPath build_output
 
           # 11. 自動上傳至 App Store Connect / TestFlight
           echo "=== 正在將 .ipa 發布至 TestFlight ==="
           app-store-connect publish \
-            --path "$(find ../../build_output -name "*.ipa" | head -n 1)"
+            --path "$(find build_output -name "*.ipa" | head -n 1)"
 
           echo "🎉 打包與自動上傳流程大功告成！"
 
