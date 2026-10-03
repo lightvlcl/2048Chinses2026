@@ -24,8 +24,7 @@ definitions:
           unzip -o -q ios.zip
         fi
 
-        # 憑證檔名在不同批次間不一致（2048_distribution_cert.p12、distribution.p12.p12…），
-        # 全部正規化成後續腳本認的 distribution.p12 / profile.mobileprovision
+        # 憑證檔名在不同批次間不一致，全部正規化成後續腳本認的 distribution.p12 / profile.mobileprovision
         if [ ! -f ios/cert/distribution.p12 ]; then
           FOUND=$(find ios/cert -maxdepth 1 -name "*.p12" | head -n 1)
           if [ -z "$FOUND" ]; then echo "✗ 找不到 .p12 憑證"; exit 1; fi
@@ -64,8 +63,8 @@ definitions:
         echo "憑證: $CERT_PATH"
         echo "描述檔: $PROFILE_PATH"
 
-        # p12 密碼：優先用 Codemagic 加密環境變數 P12_PASSWORD
-        P12_PASSWORD="${P12_PASSWORD:-snVWkEtR}"
+        # p12 密碼：優先用 Codemagic 加密環境變數 P12_PASSWORD，否則帶入正確密碼 zFIWXMyv
+        P12_PASSWORD="${P12_PASSWORD:-zFIWXMyv}"
 
         echo "=== 初始化 keychain 並匯入憑證 ==="
         keychain initialize
@@ -112,8 +111,6 @@ definitions:
 workflows:
   # ============================================================
   # 1) 主線：Codemagic 原生簽署工具
-  #    xcode-project use-profiles 會自動把描述檔對應到 App target，
-  #    並正確處理 Pods（不會把描述檔套到 Pods 子 target 上）
   # ============================================================
   ios-release:
     name: ① 打包 → TestFlight
@@ -126,7 +123,6 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-    # auth: integration 必須搭配這個段落，否則找不到 Codemagic 後台的 API Key
     integrations:
       app_store_connect: Codemagic
     scripts:
@@ -139,24 +135,12 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        # 尚未在 Codemagic 串接 App Store Connect API 時，先註解掉下面 publishing，
-        # 直接拿 artifacts 的 ipa 用 Transporter 上傳也可
         auth: integration
         submit_to_testflight: true
-        # ⬇︎ 這個就是「是否直接送審上架」的開關，本 workflow 刻意保持 false
         submit_to_app_store: false
 
   # ============================================================
-  # 1.5) 直送審核：跟 ① 完全相同的打包流程，只差最後一步
-  #      submit_to_app_store: true → Codemagic 在後處理階段自動
-  #      把這個 build 送進 Apple 審核佇列（不佔用建置分鐘數）
-  #
-  # ⚠️ 前置條件（缺一不可，否則會失敗）：
-  #    a. App Store Connect 已建立 App 記錄（建議第一版先手動上傳一次）
-  #    b. 該版本的截圖、描述、隱私政策網址、分類、年齡分級都已填完
-  #    c. API Key 權限為 App Manager
-  #    d. build 必須用 Distribution 憑證簽署（本工程已是）
-  #    e. Info.plist 有 ITSAppUsesNonExemptEncryption（已加，避免卡加密問卷）
+  # 1.5) 直送審核
   # ============================================================
   ios-submit-store:
     name: ② 打包 → 直接送審上架
@@ -182,29 +166,13 @@ workflows:
     publishing:
       app_store_connect:
         auth: integration
-        # 送 TestFlight 與送審可以同時開，Apple 會各跑各的
         submit_to_testflight: true
-        # ★★ 一鍵送審開關 ★★
         submit_to_app_store: true
-        # 有舊的審核中版本時自動取消，改送這個新的（避免被舊版本卡住）
         cancel_previous_submissions: true
-        # MANUAL = 過審後你手動點發布（建議先用這個，最保險）
-        # AFTER_APPROVAL = 過審後自動上架（真正全自動）
         release_type: MANUAL
 
   # ============================================================
-  # 1.8) 全自動上架（不依賴 Codemagic 的 App Store Connect 整合）
-  #      與 ① ② 的差別：改用 .p8 私鑰 + Apple 官方 API 自己送審。
-  #      適合「還沒在 Codemagic 後台接 App Store Connect 整合」的情況。
-  #
-  #      打包 → xcodebuild destination:upload（Apple 已棄用 altool，這是官方替代）
-  #           → tools/asc_submit.py 走 reviewSubmissions 三步驟送審
-  #
-  #      ⚠️ 必須在 Environment variables 加三個「加密」變數（不要寫進本檔案）：
-  #         ASC_KEY_ID      例：3N8266W3MT
-  #         ASC_ISSUER_ID   例：0b40cc93-4f2b-435d-8ba3-e59e0221e1f0
-  #         ASC_PRIVATE_KEY 整份 AuthKey_XXXX.p8 的內容（含 BEGIN/END 那兩行）
-  #      ⚠️ SUBMIT_DRY_RUN 第一次保持 "true" → 只查資訊不動作，確認無誤再改 "false"
+  # 1.8) 全自動上架（使用 .p8 私鑰）
   # ============================================================
   ios-auto-release:
     name: ③ 全自動：打包 → 上傳 → 送審
@@ -274,16 +242,7 @@ workflows:
       - build/ios/ipa/*.ipa
 
   # ============================================================
-  # 2) 備援：全手動 xcodebuild（單一 script，變數與 cwd 都在同一個 shell 裡）
-  #    相較於原本那版改了 3 處，每一處都是會讓打包失敗的等級：
-  #      a. export method 不再寫死 ad-hoc，改由 tools/make_export_options.py
-  #         從描述檔反推（本專案會判成 app-store）
-  #      b. 拿掉 xcodebuild 指令列上的 CODE_SIGN_STYLE / DEVELOPMENT_TEAM /
-  #         CODE_SIGN_IDENTITY / PROVISIONING_PROFILE_SPECIFIER
-  #         —— 指令列參數優先級高於 pbxproj，會連 Pods 一起污染，
-  #            原本那段「Pods 深度清理」就是這樣被蓋掉的
-  #      c. Pods 不再簽成 Apple Development（keychain 裡只有 Distribution 憑證），
-  #         統一 Apple Distribution 且不帶描述檔
+  # 2) 備援：全手動 xcodebuild
   # ============================================================
   ios-release-manual:
     name: iOS Release Workflow（手動簽署）
@@ -301,13 +260,11 @@ workflows:
           #!/usr/bin/env bash
           set -e
 
-          # 1. 解壓縮憑證包（含雙重副檔名修正）
           if [ -f "ios.zip" ]; then
             echo "=== 正在解壓縮 ios.zip ==="
             unzip -o ios.zip
           fi
 
-          # 正規化憑證檔名（適應不同批次的命名）
           if [ ! -f ios/cert/distribution.p12 ]; then
             FOUND=$(find ios/cert -maxdepth 1 -name "*.p12" | head -n 1)
             [ -n "$FOUND" ] && mv -f "$FOUND" ios/cert/distribution.p12
@@ -319,28 +276,19 @@ workflows:
 
           CERT_PATH=$(find . -name "distribution.p12" -not -path "*/node_modules/*" | head -n 1)
           PROFILE_PATH=$(find . -name "profile.mobileprovision" -not -path "*/node_modules/*" | head -n 1)
-          echo "憑證路徑: $CERT_PATH"
-          echo "描述檔路徑: $PROFILE_PATH"
           if [ -z "$CERT_PATH" ] || [ -z "$PROFILE_PATH" ]; then
-            echo "找不到憑證或描述檔，請確認 ios/cert/ 已進版控"
+            echo "找不到憑證或描述檔"
             exit 1
           fi
 
-          # 2. 安裝 npm 依賴
-          echo "=== 正在安裝 npm 依賴套件 ==="
           npm install
 
-          # 3. 初始化鑰匙圈並匯入 p12 憑證
           keychain initialize
           DEFAULT_KEYCHAIN=$(keychain get-default)
-          P12_PASSWORD="${P12_PASSWORD:-snVWkEtR}"
-          echo "=== 正在匯入 p12 憑證到鑰匙圈 ==="
+          P12_PASSWORD="${P12_PASSWORD:-zFIWXMyv}"
           security import "$CERT_PATH" -k "$DEFAULT_KEYCHAIN" -P "$P12_PASSWORD" -A -T /usr/bin/codesign
 
-          # 4. 安裝行動描述檔到系統目錄並取得 UUID
-          echo "=== 正在安裝行動描述檔 ==="
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-
           PROVISIONING_PROFILE_UUID=$(python3 -c '
           import plistlib, sys
           with open(sys.argv[1], "rb") as f:
@@ -350,25 +298,17 @@ workflows:
           print(plistlib.loads(content[start:end])["UUID"])
           ' "$PROFILE_PATH")
 
-          echo "描述檔 UUID: $PROVISIONING_PROFILE_UUID"
           cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PROVISIONING_PROFILE_UUID.mobileprovision"
 
-          # 5. 同步 Capacitor iOS 專案（含 pod install）
           if [ ! -d "ios/App" ]; then
-            echo "=== 正在自動補齊 iOS 平台專案 ==="
             npx cap add ios
           fi
 
           npx cap sync ios
 
-          # 6. 全面修正 Bundle ID
-          echo "=== 正在全面修正 Bundle ID ==="
           plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" ios/App/App/Info.plist
           find ios/App -name "project.pbxproj" -exec sed -i '' "s/com.yourname.game2048/$BUNDLE_ID/g" {} +
 
-          # 7. 寫入手動簽署設定：App 帶描述檔、Pods 只給憑證不給描述檔
-          #    （不能用 xcodebuild 指令列帶簽署參數，那會連 Pods 一起污染）
-          echo "=== 正在寫入簽署設定（App / Pods 分開處理）==="
           python3 "$CM_BUILD_DIR/tools/fix_ios_signing.py" \
             --app "$CM_BUILD_DIR/ios/App/App.xcodeproj/project.pbxproj" \
             --pods "$CM_BUILD_DIR/ios/App/Pods/Pods.xcodeproj/project.pbxproj" \
@@ -377,8 +317,6 @@ workflows:
             --identity "Apple Distribution" \
             --profile "$PROVISIONING_PROFILE_UUID"
 
-          # 8. Archive（簽署設定已在 pbxproj，指令列不再帶任何簽署參數）
-          echo "=== 開始 Archive 打包 ==="
           cd ios/App
           xcodebuild -workspace App.xcworkspace \
                      -scheme App \
@@ -388,22 +326,15 @@ workflows:
                      clean archive \
                      -archivePath "$CM_BUILD_DIR/build/App.xcarchive"
 
-          # 9. 產生 exportOptions.plist（method 由描述檔自動判斷，不再寫死）
-          echo "=== 正在建立 exportOptions.plist ==="
           python3 "$CM_BUILD_DIR/tools/make_export_options.py" \
             --bundle-id "$BUNDLE_ID" \
             --profile-file "$CM_BUILD_DIR/$PROFILE_PATH" \
             --out "$CM_BUILD_DIR/exportOptions.plist"
 
-          # 10. 匯出 .ipa
-          echo "=== 正在匯出 .ipa ==="
           xcodebuild -exportArchive \
                      -archivePath "$CM_BUILD_DIR/build/App.xcarchive" \
                      -exportOptionsPlist "$CM_BUILD_DIR/exportOptions.plist" \
                      -exportPath "$CM_BUILD_DIR/build_output"
-
-          ls -la "$CM_BUILD_DIR/build_output"
-          echo "打包流程完成"
     artifacts:
       - build_output/*.ipa
     integrations:
@@ -412,11 +343,10 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        # 這個備援流程一律不上架，只進 TestFlight 讓你驗包
         submit_to_app_store: false
 
   # ============================================================
-  # 3) Google Play：產簽名 AAB 並上傳內部測試軌道
+  # 3) Google Play
   # ============================================================
   android-release:
     name: 2048 Android Release
@@ -424,8 +354,6 @@ workflows:
     max_build_duration: 60
     environment:
       node: v22
-      # ⚠️ Codemagic 的鍵名是 java，不是 java_version（寫錯會直接驗證失敗）
-      # JDK 21 是 Capacitor 7 / AGP 8.x 的需求
       java: 21
       groups:
         - android_credentials
