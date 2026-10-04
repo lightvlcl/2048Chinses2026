@@ -113,8 +113,9 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-    integrations:
-      app_store_connect: Codemagic
+      # 若您將變數放入 Environment variables 群組，可在此取消註解並填入群組名稱：
+      # groups:
+      #   - apple_credentials
     scripts:
       - *unpack
       - *deps
@@ -125,7 +126,10 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: integration
+        auth: api_key
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
         submit_to_testflight: true
         submit_to_app_store: false
 
@@ -143,8 +147,6 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-    integrations:
-      app_store_connect: Codemagic
     scripts:
       - *unpack
       - *deps
@@ -155,14 +157,17 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: integration
+        auth: api_key
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
         submit_to_testflight: true
         submit_to_app_store: true
         cancel_previous_submissions: true
         release_type: MANUAL
 
   # ============================================================
-  # 1.8) 全自動上架（使用 Codemagic 官方 Integrations，最穩健）
+  # 1.8) 全自動上架
   # ============================================================
   ios-auto-release:
     name: ③ 全自動：打包 → 上傳 → 送審
@@ -175,8 +180,6 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-    integrations:
-      app_store_connect: Codemagic   # 對應您在 Codemagic 網頁端設定的整合名稱
     scripts:
       - *unpack
       - *deps
@@ -215,7 +218,10 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: integration
+        auth: api_key
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
         submit_to_testflight: true
         submit_to_app_store: true
         cancel_previous_submissions: true
@@ -317,11 +323,12 @@ workflows:
                      -exportPath "$CM_BUILD_DIR/build_output"
     artifacts:
       - build_output/*.ipa
-    integrations:
-      app_store_connect: Codemagic
     publishing:
       app_store_connect:
-        auth: integration
+        auth: api_key
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
         submit_to_testflight: true
         submit_to_app_store: false
 
