@@ -113,9 +113,8 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-      # 若您將變數放入 Environment variables 群組，可在此取消註解並填入群組名稱：
-      # groups:
-      #   - apple_credentials
+    integrations:
+      app_store_connect: Codemagic
     scripts:
       - *unpack
       - *deps
@@ -126,10 +125,7 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: api_key
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
 
@@ -147,6 +143,8 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
+    integrations:
+      app_store_connect: Codemagic
     scripts:
       - *unpack
       - *deps
@@ -157,10 +155,7 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: api_key
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        auth: integration
         submit_to_testflight: true
         submit_to_app_store: true
         cancel_previous_submissions: true
@@ -180,6 +175,8 @@ workflows:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
+    integrations:
+      app_store_connect: Codemagic
     scripts:
       - *unpack
       - *deps
@@ -218,10 +215,7 @@ workflows:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: api_key
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        auth: integration
         submit_to_testflight: true
         submit_to_app_store: true
         cancel_previous_submissions: true
@@ -240,6 +234,8 @@ workflows:
       vars:
         BUNDLE_ID: "com.lightvlcl.2048Chinses2026"
         TEAM_ID: "58RATT4ABA"
+    integrations:
+      app_store_connect: Codemagic
     scripts:
       - name: 穩健手動簽署打包流程
         script: |
@@ -325,10 +321,7 @@ workflows:
       - build_output/*.ipa
     publishing:
       app_store_connect:
-        auth: api_key
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
-        key_identifier: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        private_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        auth: integration
         submit_to_testflight: true
         submit_to_app_store: false
 
